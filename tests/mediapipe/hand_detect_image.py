@@ -24,3 +24,6 @@ print("result: ", hand_landmarker_result)
 annotated_image = draw_landmarks_on_image(mp_image.numpy_view(), hand_landmarker_result)
 cv2.imshow("test", cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR))
 cv2.waitKey(0)
+
+cv2.destroyAllWindows()
+landmarker.close()
