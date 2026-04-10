@@ -1,0 +1,30 @@
+[build-system]
+requires = ["uv>=0.1.0", "setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "RoboEgoPipe"
+version = "0.0.3"
+description = ""
+readme = "README.md"
+authors = [
+    { name = "Xiang Yang", email = "ryu-yang@qq.com" }
+]
+requires-python = ">=3.10,<4.0"
+dependencies = [
+
+]
+
+[project.optional-dependencies]
+# hand detect
+mediapipe = ["mediapipe"]
+
+[project.scripts]
+# robodriver-run="robodriver.scripts.run:main"
+# robodriver-sim="robodriver.scripts.sim:main"
+# robodriver-visual="robodriver.scripts.visual:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["roboegopipe*"]
+exclude = []
