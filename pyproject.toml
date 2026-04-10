@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "RoboEgoPipe"
-version = "0.0.3"
+version = "0.0.1"
 description = ""
 readme = "README.md"
 authors = [
@@ -12,7 +12,8 @@ authors = [
 ]
 requires-python = ">=3.10,<4.0"
 dependencies = [
-
+    "opencv-python",
+    "numpy",
 ]
 
 [project.optional-dependencies]
