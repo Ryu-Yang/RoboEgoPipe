@@ -14,9 +14,19 @@ requires-python = ">=3.10,<4.0"
 dependencies = [
     "opencv-python",
     "numpy",
+    "rerun-sdk",
 ]
 
 [project.optional-dependencies]
+# dataloader
+genrobot-dataset = [
+    "pandas",
+    "mcap",
+    "mcap-ros2-support",
+    "protobuf",
+    "plotly",
+]
+
 # hand detect
 mediapipe = ["mediapipe"]
 
