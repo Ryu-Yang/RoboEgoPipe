@@ -20,9 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 # dataloader
 genrobot-dataset = [
-    "pandas",
     "mcap",
-    "mcap-ros2-support",
     "protobuf",
     "plotly",
 ]
