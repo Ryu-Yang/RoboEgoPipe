@@ -22,6 +22,7 @@ dependencies = [
 genrobot-dataset = [
     "mcap",
     "protobuf",
+    "scipy",
     "plotly",
 ]
 
