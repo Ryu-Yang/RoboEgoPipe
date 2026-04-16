@@ -9,6 +9,10 @@ from pathlib import Path
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 from scipy.spatial.transform import Rotation as R
 
+from roboegopipe.dataloader.utils import (parse_urdf, rpy_to_matrix, xyz_rpy_to_matrix, 
+    compute_tf_tree
+)
+
 def get_T_body_imu():
     # URDF joint_imu origin values
     trans = np.array([0.0, 0.0, 0.0])
@@ -23,6 +27,67 @@ def get_T_body_imu():
     T_body_imu[:3, 3] = trans
     
     return T_body_imu
+
+def creat_matrix(pos, ori, input_type='quat', euler_seq='xyz'):
+    """
+    Create a 4x4 Homogeneous Transformation Matrix from position and orientation.
+
+    Parameters:
+    -----------
+    pos : array-like, shape (3,)
+        Position [x, y, z].
+    ori : array-like, shape (3,) or (4,)
+        Orientation. 
+        - If input_type='euler': [roll, pitch, yaw] in radians.
+        - If input_type='quat': [x, y, z, w] quaternion.
+    input_type : str, optional
+        'euler' or 'quat'. Default is 'euler'.
+    euler_seq : str, optional
+        Axis sequence for Euler angles (e.g., 'xyz', 'zyx'). Default is 'xyz'.
+
+    Returns:
+    --------
+    matrix : np.ndarray, shape (4, 4)
+        Homogeneous transformation matrix.
+    """
+    pos = np.asarray(pos)
+    ori = np.asarray(ori)
+
+    # 1. Handle Orientation -> Rotation Matrix (3x3)
+    if input_type == 'euler':
+        # scipy expects 'xyz' by default, but explicit is better
+        rot = R.from_euler(euler_seq, ori)
+    elif input_type == 'quat':
+        # scipy expects [x, y, z, w]
+        rot = R.from_quat(ori)
+    else:
+        raise ValueError("input_type must be 'euler' or 'quat'")
+
+    rot_mat = rot.as_matrix()  # 3x3 Rotation Matrix
+
+    # 2. Construct 4x4 Homogeneous Matrix
+    T = np.eye(4)
+    T[:3, :3] = rot_mat
+    T[:3, 3] = pos
+
+    return T
+
+def creat_pose(matrix):
+    """
+    将 4x4 变换矩阵转换为列表: [tx, ty, tz, qx, qy, qz, qw]
+    """
+    # matrix = np.asarray(matrix)
+    
+    # 1. 提取平移 (xyz)
+    translation = matrix[:3, 3]
+    
+    # 2. 提取旋转并转为四元数 (xyzw)
+    rotation_matrix = matrix[:3, :3]
+    quat = R.from_matrix(rotation_matrix).as_quat()  # 返回 [qx, qy, qz, qw]
+    
+    # 3. 转换为普通 Python 列表并返回
+    return translation.tolist() + quat.tolist()
+
 
 _proto_classes = {}
 
@@ -136,8 +201,19 @@ def extract_camera_info(msg_obj, fallback_ts=None):
 
         #处理T_b_c，这里得到的T_b_c实际上是T_imu_c,T_b_c = T_body_imu * T_imu_camera
 
-        T_body_imu = 
-        
+        T_body_imu = get_T_body_imu()
+
+        T_imu_camera = creat_matrix(
+            [camera_info['T_b_c'][0], camera_info['T_b_c'][1], camera_info['T_b_c'][2]],
+            [camera_info['T_b_c'][3], camera_info['T_b_c'][4], camera_info['T_b_c'][5], camera_info['T_b_c'][6]]
+        )
+        # T_b_c = T_body_imu @ T_imu_camera
+        T_b_c = T_imu_camera
+
+        #我这里需要把变换矩阵按照，xyz，xyzw存放
+        camera_info['T_b_c'] = creat_pose(T_b_c)
+        print(f"camera_info['T_b_c']: {camera_info['T_b_c']}")
+
         # 验证必要的相机参数
         if camera_info['K'] and len(camera_info['K']) >= 9:
             return camera_info
@@ -382,8 +458,26 @@ class GenrobotdataLoader():
     def get_traj(self):
         return self.trajectories
     
-    def get_camera_info(self):
-        return self.camera_info
+    def get_camera_info(self, from_urdf: bool, urdf_path: str | None = None):
+
+        if from_urdf and urdf_path:
+            self.camera_link = defaultdict(lambda: {"info": [], "timestamps": []})
+            
+            
+            _links, joints = parse_urdf(urdf_path)
+
+            tf_dict = compute_tf_tree(joints)
+            
+
+            for link_name, base_T_link in tf_dict.items():
+                camera_info = {}
+                camera_info['T_b_c'] = creat_pose(base_T_link)
+                self.camera_link[link_name]["info"].append(camera_info)
+
+            return self.camera_link
+        else:
+            return self.camera_info
+
 
     def get_compressed_images(self):
         return self.compressed_images

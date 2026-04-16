@@ -17,10 +17,14 @@ def main():
     parser.add_argument('--mcap_path', type=str, 
                        default="/home/ryu-yang/Documents/Datasets/Domestic_Services/Living_Room/Organization/Organize_desktop/3a8f559dfb0847c8be710fa31c37758a.mcap",
                        help='MCAP文件路径')
+    parser.add_argument('--urdf', type=str, 
+                       default="descriptions/genrobot/ego_v2.urdf",
+                       help='URDF文件路径')
     parser.add_argument('--mode', type=str, choices=['traj', 'camera_frustum', 'both','camera_move','camera_data'], default='traj',
                        help='可视化模式: traj(运动轨迹), camera_frustum(相机视锥体), camera_data(相机画面)')
     parser.add_argument('--time_alignment', type=str, choices=['nearest', 'linear'], default='nearest',
                        help='时间对齐方法: nearest(最近邻), linear(线性插值)')
+    
     
     args = parser.parse_args()
     mcap_path = args.mcap_path
@@ -39,7 +43,7 @@ def main():
     
     # 获取轨迹和相机数据
     traj = dataLoader.get_traj()
-    camera_info = dataLoader.get_camera_info()
+    camera_info = dataLoader.get_camera_info(from_urdf=True, urdf_path=args.urdf)
     
     print("\n📊 数据统计:")
     print(f"  - 轨迹数据: {len(traj)} 个topic")
@@ -49,7 +53,7 @@ def main():
     
     print(f"  - 相机数据: {len(camera_info)} 个相机")
     for topic, data in camera_info.items():
-        camera_name = topic.split('/')[-2]
+        camera_name = topic.split('/')[-1]
         print(f"    * {camera_name}: {len(data['info'])} 条信息")
     
     print(f"\n🎯 可视化模式: {args.mode}")

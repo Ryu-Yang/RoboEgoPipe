@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="ego_v2">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-0.216798466504066 -0.00019682186770023 0.000587517262096382"
+        rpy="0 0 0" />
+      <mass
+        value="0.121164053248455" />
+      <inertia
+        ixx="0.000189117177163793"
+        ixy="6.68267440872514E-08"
+        ixz="3.53449308477448E-07"
+        iyy="7.92161814086937E-05"
+        iyz="3.70630717597587E-07"
+        izz="0.000167191398265712" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="link_camera0">
+    <inertial>
+      <origin
+        xyz="-7.052858297385E-12 -1.01141317543352E-13 0.0017167081968591"
+        rpy="0 0 0" />
+      <mass
+        value="0.00156586044803258" />
+      <inertia
+        ixx="3.37566629756918E-08"
+        ixy="-4.07150407563149E-10"
+        ixz="7.53560304078754E-18"
+        iyy="4.65411373634212E-08"
+        iyz="1.09325152838683E-19"
+        izz="6.16336440738206E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera0.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera0.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_camera0"
+    type="fixed">
+    <origin
+      xyz="-0.0591415717942722 0.091226679566472 0.000245237355983252"
+      rpy="-1.92020019051968 0.00058474647819627 -0.523598874308968" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_camera0" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="link_camera1">
+    <inertial>
+      <origin
+        xyz="-7.0525477818828E-12 -1.00253139123652E-13 0.00171670819685935"
+        rpy="0 0 0" />
+      <mass
+        value="0.0015658604480326" />
+      <inertia
+        ixx="3.37566629756928E-08"
+        ixy="-4.07150407562124E-10"
+        ixz="7.52927967769794E-18"
+        iyy="4.65411373634222E-08"
+        iyz="1.11383178202715E-19"
+        izz="6.16336440738211E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_camera1"
+    type="fixed">
+    <origin
+      xyz="-0.0217461018728001 0.0596354401116829 0.000219849010521467"
+      rpy="-1.92044116931188 -0.00183157792392334 -1.04720045644852" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_camera1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="link_camera2">
+    <inertial>
+      <origin
+        xyz="-7.05227543029707E-12 -1.01196828694583E-13 0.00171670819685807"
+        rpy="0 0 0" />
+      <mass
+        value="0.00156586044803255" />
+      <inertia
+        ixx="3.37566629756513E-08"
+        ixy="-4.07150407563068E-10"
+        ixz="7.53504675831119E-18"
+        iyy="4.65411373633794E-08"
+        iyz="1.16875657470067E-19"
+        izz="6.1633644073818E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_camera2"
+    type="fixed">
+    <origin
+      xyz="-0.00481626200416135 0.029499999991059 0.000208511997219996"
+      rpy="-1.92053820377002 0 -1.57079632679931" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_camera2" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="link_camera3">
+    <inertial>
+      <origin
+        xyz="0.000127943936843306 9.06269502698454E-05 0.00153364477674493"
+        rpy="0 0 0" />
+      <mass
+        value="0.00164134398811429" />
+      <inertia
+        ixx="3.58405469811408E-08"
+        ixy="-3.48468340974337E-10"
+        ixz="7.63065394787252E-10"
+        iyy="4.75399427021121E-08"
+        iyz="5.40504660795761E-10"
+        izz="6.24603538983877E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera3.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_camera3"
+    type="fixed">
+    <origin
+      xyz="-0.0048162620041287 -0.0294999999909794 0.00020851199730948"
+      rpy="-1.9205382037657 0 -1.57079632679082" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_camera3" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="link_camera4">
+    <inertial>
+      <origin
+        xyz="0.000127943936841029 9.062695026546E-05 0.00153364477674837"
+        rpy="0 0 0" />
+      <mass
+        value="0.00164134398811321" />
+      <inertia
+        ixx="3.58405469811066E-08"
+        ixy="-3.48468340968262E-10"
+        ixz="7.63065394812321E-10"
+        iyy="4.75399427021254E-08"
+        iyz="5.40504660762225E-10"
+        izz="6.24603538983353E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera4.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_camera4"
+    type="fixed">
+    <origin
+      xyz="-0.0217461018727321 -0.0596354401116301 0.000219849010610729"
+      rpy="-1.92044116930758 0.0018315779231461 -2.0943921971416" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_camera4" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="link_camera5">
+    <inertial>
+      <origin
+        xyz="0.000127943936840853 9.0626950262962E-05 0.00153364477674882"
+        rpy="0 0 0" />
+      <mass
+        value="0.00164134398811269" />
+      <inertia
+        ixx="3.58405469810921E-08"
+        ixy="-3.48468340971907E-10"
+        ixz="7.63065394807357E-10"
+        iyy="4.75399427021084E-08"
+        iyz="5.40504660756652E-10"
+        izz="6.24603538983091E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera5.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_camera5.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_camera5"
+    type="fixed">
+    <origin
+      xyz="-0.0591415717941874 -0.0912266795664604 0.000245237356072292"
+      rpy="-1.92020019051536 -0.000584746478979593 -2.61799377928117" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_camera5" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="link_imu">
+    <inertial>
+      <origin
+        xyz="-0.00209215556859869 6.61400704452463E-07 -5.36508140802638E-07"
+        rpy="0 0 0" />
+      <mass
+        value="0.000462436051121226" />
+      <inertia
+        ixx="1.93973594020403E-08"
+        ixy="-3.81116124050658E-13"
+        ixz="3.14936203947457E-13"
+        iyy="8.84238650940347E-09"
+        iyz="1.53660423341782E-12"
+        izz="1.12559705108776E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_imu.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://ego_v2/meshes/link_imu.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_imu"
+    type="fixed">
+    <origin
+      xyz="0 0 0"
+      rpy="3.14159265358979 0.349741876975183 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="link_imu" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+</robot>

@@ -165,7 +165,7 @@ class Viewer():
             timestamps = np.array(data["timestamps"], dtype=np.float64)
             
             # 获取相机名称和颜色
-            camera_name = topic.split('/')[-2]  # 例如 camera0
+            camera_name = topic.split('/')[-1]  # 例如 camera0
             color = self.camera_colors.get(camera_name, self.default_colors[i % len(self.default_colors)])
             
             # 创建相机实体路径
@@ -190,7 +190,7 @@ class Viewer():
             camera_positions = np.array(camera_positions, dtype=np.float32)
             
             # 记录相机位置点（带时间戳）
-            if len(timestamps) > 0 and len(camera_positions) == len(timestamps):
+            if len(camera_positions) > 0:
                 
                 for idx, (pos, ts) in enumerate(zip(camera_positions, timestamps)):
                     self._set_timestamp(ts)
@@ -278,7 +278,7 @@ class Viewer():
                 print(f"⚠️ 相机 {camera_topic.split('/')[-2]} 没有有效的T_b_c数据")
                 continue
             
-            camera_name = camera_topic.split('/')[-2]
+            camera_name = camera_topic.split('/')[-1]
             
             # 新方法：相机随整个轨迹运动
             print(f"  📍 相机 {camera_name}: 随整个轨迹运动（{len(body_trajectory['positions'])} 个点）")
