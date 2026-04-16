@@ -329,3 +329,5 @@ class Viewer():
 
         self.view_trajectory(trajectories)
         self.view_camera_frustum(corrected_camera_info)
+
+    # def view_camera_data(self, )
