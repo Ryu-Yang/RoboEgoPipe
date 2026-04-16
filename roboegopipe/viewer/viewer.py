@@ -21,7 +21,7 @@ class Viewer():
         
         self.default_colors = [
             [255, 100, 100],  # 红色
-            [100, 200, 255],  # 蓝色  
+            [100, 200, 255],  # 蓝色
             [100, 255, 150],  # 绿色
             [255, 200, 100],  # 橙色
             [200, 100, 255],  # 紫色
@@ -42,12 +42,7 @@ class Viewer():
             colors=[[255, 0, 0], [0, 255, 0], [0, 0, 255]]
         ), static=True)
 
-        print("🚀 Rerun可视化已启动。")
-        print("💡 提示:")
-        print("  - 使用鼠标拖拽旋转视图")
-        print("  - 使用滚轮缩放")
-        print("  - 使用时间轴控件查看轨迹随时间变化")
-        print("  - 在Rerun界面中可切换显示/隐藏不同轨迹")
+        log.info("🚀 Rerun可视化已启动。\n")
 
     def _set_timestamp(self, timestamp_ns):
         """
@@ -147,7 +142,7 @@ class Viewer():
                 )
 
     def view_camera_frustum(self, camera_info):           
-        print("📷 可视化相机信息...")
+        log.info("📷 可视化相机视锥体...")
         for i, (topic, data) in enumerate(camera_info.items()):
             if not data["info"]:
                 continue

@@ -1,6 +1,7 @@
 import json
 import mcap.reader
 import cv2
+import logging
 import numpy as np
 
 from collections import defaultdict
@@ -12,6 +13,10 @@ from scipy.spatial.transform import Rotation as R
 from roboegopipe.dataloader.utils import (parse_urdf, rpy_to_matrix, xyz_rpy_to_matrix, 
     compute_tf_tree
 )
+
+
+log = logging.getLogger()
+
 
 def get_T_body_imu():
     # URDF joint_imu origin values
@@ -199,20 +204,20 @@ def extract_camera_info(msg_obj, fallback_ts=None):
         ts_ns = int(float(ts)) if ts is not None else fallback_ts
         camera_info['timestamp'] = ts_ns
 
-        #处理T_b_c，这里得到的T_b_c实际上是T_imu_c,T_b_c = T_body_imu * T_imu_camera
+        # #处理T_b_c，这里得到的T_b_c实际上是T_imu_c,T_b_c = T_body_imu * T_imu_camera
 
-        T_body_imu = get_T_body_imu()
+        # T_body_imu = get_T_body_imu()
 
-        T_imu_camera = creat_matrix(
-            [camera_info['T_b_c'][0], camera_info['T_b_c'][1], camera_info['T_b_c'][2]],
-            [camera_info['T_b_c'][3], camera_info['T_b_c'][4], camera_info['T_b_c'][5], camera_info['T_b_c'][6]]
-        )
-        # T_b_c = T_body_imu @ T_imu_camera
-        T_b_c = T_imu_camera
+        # T_imu_camera = creat_matrix(
+        #     [camera_info['T_b_c'][0], camera_info['T_b_c'][1], camera_info['T_b_c'][2]],
+        #     [camera_info['T_b_c'][3], camera_info['T_b_c'][4], camera_info['T_b_c'][5], camera_info['T_b_c'][6]]
+        # )
+        # # T_b_c = T_body_imu @ T_imu_camera
+        # T_b_c = T_imu_camera
 
-        #我这里需要把变换矩阵按照，xyz，xyzw存放
-        camera_info['T_b_c'] = creat_pose(T_b_c)
-        print(f"camera_info['T_b_c']: {camera_info['T_b_c']}")
+        # #我这里需要把变换矩阵按照，xyz，xyzw存放
+        # camera_info['T_b_c'] = creat_pose(T_b_c)
+        # print(f"camera_info['T_b_c']: {camera_info['T_b_c']}")
 
         # 验证必要的相机参数
         if camera_info['K'] and len(camera_info['K']) >= 9:
@@ -349,8 +354,7 @@ class GenrobotdataLoader():
         # 存储解码后的图像
         self.decoded_images = defaultdict(lambda: {"images": [], "timestamps": []})
         
-        self.msg_count = 0
-        self.parsed_count = 0
+        self.traj_count = 0
         self.camera_count = 0
         self.image_count = 0
     
@@ -361,7 +365,7 @@ class GenrobotdataLoader():
         Args:
             decode_images: 是否立即解码图像数据（可能会消耗较多内存）
         """
-        print(f"📖 正在读取 MCAP 文件: {Path(self.mcap_file_path).name}")
+        log.info(f"📖 正在读取 MCAP 文件: {Path(self.mcap_file_path).name}")
 
         # 读取并解析数据
         with open(self.mcap_file_path, "rb") as f:
@@ -376,7 +380,6 @@ class GenrobotdataLoader():
                 if not (is_camera_info_topic or is_compressed_image_topic or is_pose_topic):
                     continue
 
-                self.msg_count += 1
                 try:
                     msg_obj = decode_message(schema, message.data)
                     
@@ -387,8 +390,6 @@ class GenrobotdataLoader():
                             self.camera_info[channel.topic]["info"].append(camera_data)
                             self.camera_info[channel.topic]["timestamps"].append(camera_data['timestamp'])
                             self.camera_count += 1
-                            if self.camera_count <= 3:  # 只打印前3条相机信息
-                                print(f"📷 解析相机信息: {channel.topic}")
                     
                     elif is_compressed_image_topic:
                         # 处理压缩图像数据
@@ -406,9 +407,6 @@ class GenrobotdataLoader():
                                 if decoded_img is not None:
                                     self.decoded_images[channel.topic]["images"].append(decoded_img)
                                     self.decoded_images[channel.topic]["timestamps"].append(image_data['timestamp'])
-                            
-                            if self.image_count <= 3:  # 只打印前3条图像信息
-                                print(f"📸 解析压缩图像: {channel.topic}, 格式: {image_data['format']}, 大小: {len(image_data['data'])} 字节")
                     
                     elif is_pose_topic:
                         # 处理位姿数据
@@ -421,38 +419,34 @@ class GenrobotdataLoader():
                             else:
                                 self.trajectories[channel.topic]["orientations"].append(None)
                             self.trajectories[channel.topic]["timestamps"].append(ts_ns)
-                            self.parsed_count += 1
+                            self.traj_count += 1
                             
                 except Exception as e:
-                    if self.parsed_count == 0 and self.msg_count <= 5:
-                        print(f"⚠️ 解析 {channel.topic} 失败 (前5条): {e}")
+                    log.warning(f"⚠️ 解析 {channel.topic} 失败: {e}")
                     continue
+        if self.traj_count > 0:
+            log.info(f"✅ 成功解析 {self.traj_count} 条位姿消息。")
 
-        if self.msg_count == 0:
-            print("❌ 未找到匹配的 Topic 数据。")
-            return
-        
-        print(f"✅ 成功解析 {self.parsed_count}/{self.msg_count} 条位姿消息。")
         if self.camera_count > 0:
-            print(f"📷 成功解析 {self.camera_count} 条相机信息。")
+            log.info(f"📷 成功解析 {self.camera_count} 条相机信息。")
             for topic, data in self.camera_info.items():
                 if data["info"]:
-                    short_name = topic.split('/')[-2] + '_' + topic.split('/')[-1]
-                    print(f"  - {short_name}: {len(data['info'])} 条信息")
+                    short_name = topic.split('/')[-2] + '/' +topic.split('/')[-1]
+                    log.info(f"  - {short_name}: {len(data['info'])} 条信息")
         
         if self.image_count > 0:
-            print(f"📸 成功解析 {self.image_count} 条压缩图像消息。")
+            log.info(f"📸 成功解析 {self.image_count} 条压缩图像消息。")
             for topic, data in self.compressed_images.items():
                 if data["data"]:
-                    short_name = topic.split('/')[-2] + '_' + topic.split('/')[-1]
-                    print(f"  - {short_name}: {len(data['data'])} 张图像, 格式: {data['format'][0] if data['format'] else 'unknown'}")
+                    short_name = topic.split('/')[-2] + '/' + topic.split('/')[-1]
+                    log.info(f"  - {short_name}: {len(data['data'])} 张图像, 格式: {data['format'][0] if data['format'] else 'unknown'}")
             
             if decode_images:
                 decoded_count = sum(len(data["images"]) for data in self.decoded_images.values())
-                print(f"  - 已解码 {decoded_count} 张图像")
+                log.info(f"  - 已解码 {decoded_count} 张图像")
 
         if not self.trajectories and not self.camera_info and not self.compressed_images:
-            print("❌ 未提取到有效数据。")
+            log.error("❌ 未提取到有效数据。")
             return
 
     def get_traj(self):
@@ -472,7 +466,8 @@ class GenrobotdataLoader():
             for link_name, base_T_link in tf_dict.items():
                 camera_info = {}
                 camera_info['T_b_c'] = creat_pose(base_T_link)
-                self.camera_link[link_name]["info"].append(camera_info)
+                if 'camera' in link_name:
+                    self.camera_link[link_name]["info"].append(camera_info)
 
             return self.camera_link
         else:
