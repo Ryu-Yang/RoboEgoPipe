@@ -1,9 +1,11 @@
 import time
-
+import logging
 import rerun as rr
 import numpy as np
 
 from roboegopipe.viewer.camera import create_camera_frustum, compute_camera_world_pose
+
+log = logging.getLogger()
 
 class Viewer():
     def __init__(self):
@@ -25,9 +27,9 @@ class Viewer():
             [200, 100, 255],  # 紫色
         ]
 
-        self.colors = {
-            "/robot0/vio/eef_pose": [255, 100, 100],  # 红色
-            "/robot0/vio/relative_eef_pose": [100, 200, 255],  # 蓝色
+        self.traj_colors = {
+            "eef_pose": [255, 100, 100],  # 红色
+            "relative_eef_pose": [100, 200, 255],  # 蓝色
         }# 为每个轨迹创建不同的颜色
 
         # 创建3D视图
@@ -58,102 +60,91 @@ class Viewer():
         
         rr.set_time("timestamp", timestamp=timestamp_seconds)
 
-    def _short_name(self, name: str):
-        short_name = name.split('/')[-1].replace('_', ' ').title()
-        short_name_safe = short_name.replace(' ', '_')
-        
-        return short_name_safe
-
-    def view_trajectory(self, trajectories):
+    def view_trajectory(self, name: str, positions: np.ndarray, orientations: np.ndarray, timestamps: np.ndarray):
         """
-        显示轨迹
+        显示轨迹, 轨迹应该在世界坐标系下，世界坐标系以初始第一帧的头部正前方为iX，重力加速度方向相反为Z，Y与XZ正交，右手系
         
         Args:
-            trajectories: 每个话题需要2个以上的轨迹点
+            name: 轨迹名字
+            positions: 
+            orientations:
+            timestamps: 
         """
-        # 为每个轨迹添加坐标系
-        for i, (topic, data) in enumerate(trajectories.items()):
-            if not data["positions"] or len(data["positions"]) <= 1 or len(data["timestamps"]) <= 1:
-                continue
-                
-            positions = np.array(data["positions"], dtype=np.float32)
-            orientations = np.array(data["orientations"], dtype=np.float32)
-            timestamps = np.array(data["timestamps"], dtype=np.float64)
+        log.info(f"view_trajectory: 📊 {name}: {len(positions)} 个点")
 
-            # 检查是否有方向数据
-            has_orientations = len(orientations) == len(positions) and all(o is not None for o in orientations)
+        if len(positions) <= 1 or len(timestamps) <= 1:
+            return
             
-            # 获取颜色
-            color = self.colors.get(topic, self.default_colors[i % len(self.default_colors)])
-            
-            short_name = self._short_name(topic)
+        # 检查是否有方向数据
+        has_orientations = len(orientations) == len(positions) and all(o is not None for o in orientations)
+        
+        # 获取颜色
+        color = self.traj_colors.get(name, self.default_colors[0])
 
-            print(f"  📊 {short_name}: {len(positions)} 个点")
-            
-            # 创建轨迹实体路径
-            entity_path = f"world/trajectories/{short_name}"
-            
-            # 绘制轨迹起点和终点
+        # 创建轨迹实体路径
+        entity_path = f"world/trajectories/{name}"
+        
+        # 绘制轨迹起点和终点
+        rr.log(
+            f"{entity_path}/point_start",
+            rr.Points3D([positions[0]], radii=0.01, colors=[0, 255, 0]),
+            static=True
+        )
+        rr.log(
+            f"{entity_path}/point_end",
+            rr.Points3D([positions[-1]], radii=0.01, colors=[255, 0, 0]),
+            static=True
+        )
+
+        # 按时间顺序记录每个点
+        for idx, (pos, ts) in enumerate(zip(positions, timestamps)):
+            self._set_timestamp(ts)
+
             rr.log(
-                f"{entity_path}/point_start",
-                rr.Points3D([positions[0]], radii=0.01, colors=[0, 255, 0]),
-                static=True
+                f"{entity_path}/points",
+                rr.Points3D(positions[:idx+1], radii=0.005, colors=color)
             )
+
             rr.log(
-                f"{entity_path}/point_end",
-                rr.Points3D([positions[-1]], radii=0.01, colors=[255, 0, 0]),
-                static=True
+                f"{entity_path}/line",
+                rr.LineStrips3D(positions[:idx+1], colors=color)
             )
 
-            # 按时间顺序记录每个点
-            for idx, (pos, ts) in enumerate(zip(positions, timestamps)):
-                self._set_timestamp(ts)
-
+            rr.log(
+                f"{entity_path}/current_point",
+                rr.Points3D([pos], radii=0.005, colors=color)
+            )
+            
+            # 如果存在方向数据，记录当前时间的坐标系
+            if has_orientations:
+                qx, qy, qz, qw = orientations[idx]
+                axis_length = 0.05  # 坐标系轴长度
+                
+                # 创建当前时间的坐标系变换
                 rr.log(
-                    f"{entity_path}/points",
-                    rr.Points3D(positions[:idx+1], radii=0.005, colors=color)
-                )
-
-                rr.log(
-                    f"{entity_path}/line",
-                    rr.LineStrips3D(positions[:idx+1], colors=color)
-                )
-
-                rr.log(
-                    f"{entity_path}/current_point",
-                    rr.Points3D([pos], radii=0.005, colors=color)
+                    f"{entity_path}/current_frame",
+                    rr.Transform3D(
+                        translation=pos,
+                        rotation=rr.Quaternion(xyzw=[qx, qy, qz, qw])
+                    )
                 )
                 
-                # 如果存在方向数据，记录当前时间的坐标系
-                if has_orientations:
-                    qx, qy, qz, qw = orientations[idx]
-                    axis_length = 0.05  # 坐标系轴长度
-                    
-                    # 创建当前时间的坐标系变换
-                    rr.log(
-                        f"{entity_path}/current_frame",
-                        rr.Transform3D(
-                            translation=pos,
-                            rotation=rr.Quaternion(xyzw=[qx, qy, qz, qw])
-                        )
+                rr.log(
+                    f"{entity_path}/current_frame/axes",
+                    rr.Arrows3D(
+                        origins=[[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                        vectors=[
+                            [axis_length, 0, 0],  # X轴
+                            [0, axis_length, 0],  # Y轴
+                            [0, 0, axis_length],  # Z轴
+                        ],
+                        colors=[
+                            [255, 0, 0],  # 红色 X轴
+                            [0, 255, 0],  # 绿色 Y轴
+                            [0, 0, 255],  # 蓝色 Z轴
+                        ]
                     )
-                    
-                    rr.log(
-                        f"{entity_path}/current_frame/axes",
-                        rr.Arrows3D(
-                            origins=[[0, 0, 0], [0, 0, 0], [0, 0, 0]],
-                            vectors=[
-                                [axis_length, 0, 0],  # X轴
-                                [0, axis_length, 0],  # Y轴
-                                [0, 0, axis_length],  # Z轴
-                            ],
-                            colors=[
-                                [255, 0, 0],  # 红色 X轴
-                                [0, 255, 0],  # 绿色 Y轴
-                                [0, 0, 255],  # 蓝色 Z轴
-                            ]
-                        )
-                    )
+                )
 
     def view_camera_frustum(self, camera_info):           
         print("📷 可视化相机信息...")

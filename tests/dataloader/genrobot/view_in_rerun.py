@@ -1,13 +1,33 @@
 from pathlib import Path
 import argparse
+import numpy as np
 
 from roboegopipe.dataloader.genrobot import GenrobotdataLoader
 from roboegopipe.viewer.viewer import Viewer
-# from roboegopipe.viewer.camera import (
-#     visualize_camera_with_rerun, 
-#     visualize_trajectory_and_camera,
-#     visualize_camera_with_trajectory
-# )
+
+import logging
+from rich.logging import RichHandler
+
+logging.basicConfig(
+    level=logging.INFO,                    # 设置日志级别
+    format="%(message)s",                  # 只显示消息本身
+    datefmt="[%X]",                        # 时间格式
+    handlers=[RichHandler()]               # 关键：使用 RichHandler
+)
+log = logging.getLogger()
+
+def parse_and_view_traj_data(viewer: Viewer, traj):
+    def _short_name(name: str):
+        short_name = name.split('/')[-1]
+        
+        return short_name
+
+    for topic, data in traj.items():
+        name = _short_name(topic)
+        positions = np.array(data["positions"], dtype=np.float32)
+        orientations = np.array(data["orientations"], dtype=np.float32)
+        timestamps = np.array(data["timestamps"], dtype=np.float64)
+        viewer.view_trajectory(name, positions, orientations, timestamps)
 
 
 def main():
@@ -77,11 +97,11 @@ def main():
     viewer = Viewer()
 
     if args.mode == 'traj' and traj:
-        viewer.view_trajectory(traj)
+        parse_and_view_traj_data(viewer, traj)        
     if args.mode == 'camera_frustum' and camera_info:
         viewer.view_camera_frustum(camera_info)
     if args.mode == 'both' and camera_info and traj:
-        viewer.view_trajectory(traj)
+        parse_and_view_traj_data(viewer, traj)
         viewer.view_camera_frustum(camera_info)
     if args.mode == 'camera_move' and camera_info and traj:
         viewer.view_camera_move(camera_info, traj)

@@ -15,6 +15,7 @@ dependencies = [
     "opencv-python",
     "numpy",
     "rerun-sdk",
+    "rich",
 ]
 
 [project.optional-dependencies]
