@@ -3,18 +3,21 @@ import numpy as np
 import rerun as rr
 
 
-def create_camera_frustum(entity_path, camera_data, color):
+def create_camera_frustum(entity_path, K, width, height, color, near=0.01, far=0.02):
     """
     创建相机视锥体可视化
     
     Args:
-        entity_path: 实体路径
-        camera_data: 相机数据字典
+        entity_path: rerun实体路径
+        k: 相机内参k
+        width: 相机宽度
+        height: 相机高度
         color: 颜色
+        near: 视锥体参数-近平面距离
+        far: 视锥体参数-远平面距离
     """
+    # print(entity_path, K, width, height, color, near, far)
     
-    # 从相机内参矩阵K提取参数
-    K = camera_data.get('K', [])
     if len(K) < 9:
         return
     
@@ -22,12 +25,6 @@ def create_camera_frustum(entity_path, camera_data, color):
     fy = K[4]  # fy
     cx = K[2]  # cx
     cy = K[5]  # cy
-    width = camera_data.get('width', 1600)
-    height = camera_data.get('height', 1300)
-    
-    # 计算视锥体参数
-    near = 0.01  # 近平面距离 (减小)
-    far = 0.02    # 远平面距离 (减小)
     
     # 计算视锥体角点（在相机坐标系中）
     # 归一化图像坐标

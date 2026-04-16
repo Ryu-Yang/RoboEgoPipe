@@ -3,6 +3,7 @@ import mcap.reader
 import cv2
 import logging
 import numpy as np
+import re
 
 from collections import defaultdict
 from pathlib import Path
@@ -464,9 +465,25 @@ class GenrobotdataLoader():
             
 
             for link_name, base_T_link in tf_dict.items():
-                camera_info = {}
-                camera_info['T_b_c'] = creat_pose(base_T_link)
                 if 'camera' in link_name:
+
+                    match = re.search(r'\d+', link_name)
+        
+                    if not match:
+                        continue 
+                        
+                    num_str = match.group(0)
+                    
+                    match_name = f"camera{num_str}"
+
+                    for key, _data in self.camera_info.items():
+                        if match_name in key:
+                            match_name = key
+                            break
+
+                    camera_info = self.camera_info[match_name]["info"][0]
+                    camera_info['T_b_c'] = creat_pose(base_T_link)
+                
                     self.camera_link[link_name]["info"].append(camera_info)
 
             return self.camera_link
