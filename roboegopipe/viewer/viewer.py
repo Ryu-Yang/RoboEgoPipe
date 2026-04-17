@@ -297,4 +297,37 @@ class Viewer():
                       
         
 
+    def view_depth_maps(self, name: str, depth_maps: list, timestamps: list):
+        """
+        显示深度图序列
+        
+        Args:
+            name: 深度图名称
+            depth_maps: 深度图列表，每个元素是 (H, W) 的 numpy 数组
+            timestamps: 时间戳列表（纳秒）
+        """
+        log.info(f"view_depth_maps: {name}: {len(depth_maps)} 帧")
+
+        if len(depth_maps) <= 1 or len(timestamps) <= 1:
+            return
+
+        entity_path = f"depth/{name}"
+
+        for idx, (depth, ts) in enumerate(zip(depth_maps, timestamps)):
+            self._set_timestamp(ts)
+
+            # 将深度图转换为可视化图像（归一化到 0-255）
+            # 深度范围 0-5m
+            max_depth = 5.0
+            depth_normalized = np.clip(depth, 0, max_depth) / max_depth
+            depth_colormap = cv2.applyColorMap(
+                (depth_normalized * 255).astype(np.uint8), cv2.COLORMAP_JET
+            )
+            depth_colormap[depth == 0] = [0, 0, 0]  # 无效深度设为黑色
+
+            rr.log(
+                f"{entity_path}",
+                rr.Image(depth_colormap)
+            )
+
     # def view_camera_data(self, )

@@ -1,11 +1,13 @@
 from pathlib import Path
 import argparse
 import numpy as np
+import re
 
 from roboegopipe.dataloader.genrobot import GenrobotdataLoader
+from roboegopipe.depthestimator.stereo import StereoEstimator,creat_matrix_from_pose
 from roboegopipe.viewer.viewer import Viewer
 from roboegopipe.viewer.camera import create_camera_frustum, compute_camera_world_pose
-
+from scipy.spatial.transform import Rotation as R
 import logging
 from rich.logging import RichHandler
 
@@ -17,6 +19,68 @@ logging.basicConfig(
     handlers=[RichHandler()]               # 关键：使用 RichHandler
 )
 log = logging.getLogger()
+
+
+def find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3):
+    """
+    查找指定的双目相机对
+    
+    Args:
+        camera_info: 相机信息字典
+        images: 图像数据字典
+        left_cam_idx: 左相机编号 (默认 2)
+        right_cam_idx: 右相机编号 (默认 3)
+    
+    Returns:
+        pair: dict 包含配对信息，或 None
+    """
+    left_info = None
+    right_info = None
+    left_img_topic = None
+    right_img_topic = None
+    
+    # 从 camera_info 中查找左/右相机信息
+    for topic, data in camera_info.items():
+        match = re.search(r'camera(\d+)', topic)
+        if match and data.get("info"):
+            cam_idx = int(match.group(1))
+            if cam_idx == left_cam_idx:
+                left_info = data["info"][0]
+            elif cam_idx == right_cam_idx:
+                right_info = data["info"][0]
+    
+    if left_info is None or right_info is None:
+        log.warning(f"⚠️ 未找到 camera{left_cam_idx} 或 camera{right_cam_idx} 的相机信息")
+        return None
+    
+    # 从 images 中查找对应的图像 topic
+    for topic in images.keys():
+        match = re.search(r'camera(\d+)', topic)
+        if match:
+            cam_idx = int(match.group(1))
+            if cam_idx == left_cam_idx:
+                left_img_topic = topic
+            elif cam_idx == right_cam_idx:
+                right_img_topic = topic
+    
+    if left_img_topic is None or right_img_topic is None:
+        log.warning(f"⚠️ 未找到 camera{left_cam_idx} 或 camera{right_cam_idx} 的图像数据")
+        log.warning(f"可用图像 topics: {list(images.keys())}")
+        return None
+    
+    width = left_info.get("width", 0)
+    height = left_info.get("height", 0)
+    
+    log.info(f"📷 配对双目相机: camera{left_cam_idx} (L) <-> camera{right_cam_idx} (R)")
+    
+    return {
+        "left_img_topic": left_img_topic,
+        "right_img_topic": right_img_topic,
+        "left_info": left_info,
+        "right_info": right_info,
+        "width": width,
+        "height": height,
+    }
 
 
 def _short_name(name: str, id = -1):
@@ -192,6 +256,7 @@ def main():
     
     log.info("🔧 初始化数据加载器...\n")
     dataLoader = GenrobotdataLoader(mcap_path)
+    estimator = StereoEstimator()
     
     log.info("📖 读取数据...")
     dataLoader.read_data(decode_images=True)
@@ -203,6 +268,108 @@ def main():
     # 解码图像（如果需要）
     log.info("🔄 解码图像数据...")
     images = dataLoader.decode_all_images()
+
+    # 计算深度
+    log.info("🔍 计算深度数据...")
+    
+    # 1. 查找指定的双目相机对 (camera2, camera3)
+    pair = find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3)
+    
+    if pair is None:
+        log.warning("⚠️ 未找到有效的双目相机对，跳过深度计算")
+        depth_data = {}
+        camera_align_data = {}
+    else:
+        left_img_topic = pair["left_img_topic"]
+        right_img_topic = pair["right_img_topic"]
+        left_info = pair["left_info"]
+        right_info = pair["right_info"]
+        width = pair["width"]
+        height = pair["height"]
+        
+        # 获取图像和时间戳
+        left_images = images[left_img_topic]["images"]
+        right_images = images[right_img_topic]["images"]
+        left_timestamps = images[left_img_topic]["timestamps"]
+        right_timestamps = images[right_img_topic]["timestamps"]
+        
+        log.info(f"🔧 标定双目系统: {left_img_topic.split('/')[-2]} (L) <-> {right_img_topic.split('/')[-2]} (R)")
+        log.debug(f"  - 图像尺寸: {width}x{height}")
+        log.debug(f"  - 左相机 T_b_c: {left_info.get('T_b_c', [])[:3]}")
+        
+        # 标定双目系统
+        estimator.calibrate_from_camera_info(left_info, right_info, (width, height))
+        
+        # 批量计算深度
+        pair_depth = estimator.compute_depth_batch(
+            left_images, right_images, left_timestamps, right_timestamps
+        )
+        
+        # 存储深度数据（带时间戳）
+        depth_topic = "stereo/camera2_camera3"
+        depth_data = {depth_topic: pair_depth}
+        
+        # 获取校正后的相机参数
+        rect_params = estimator.get_rectified_params()
+        K_rect = rect_params["K_rect"]
+        R_rect = rect_params["R_rect"]
+        rect_width = rect_params["width"]
+        rect_height = rect_params["height"]
+        
+        # 计算校正后的 T_b_c
+        # 校正后的相机位姿 = 原始 T_b_c * R_rect^T
+        # 因为 R_rect 是校正旋转，它把相机坐标系旋转到了校正坐标系
+        T_b_c_orig = left_info.get("T_b_c", [])
+        T_b_c_matrix = creat_matrix_from_pose(T_b_c_orig)
+        # 校正后的变换: T_b_c_rect = T_b_c * R_rect^T
+        # 等价于: 先做 R_rect 旋转，再做原始的 T_b_c
+        T_b_c_rect = T_b_c_matrix.copy()
+        T_b_c_rect[:3, :3] = T_b_c_matrix[:3, :3] @ R_rect.T
+        
+        # 转换为 [x, y, z, qx, qy, qz, qw] 格式
+        T_b_c_rect_list = list(T_b_c_rect[:3, 3]) + list(R.from_matrix(T_b_c_rect[:3, :3]).as_quat())
+        
+        log.debug(f"  - 原始 K: {left_info.get('K', [])[:3]}")
+        log.debug(f"  - 校正后 K: {K_rect[0, :3]}")
+        log.debug(f"  - 原始尺寸: {width}x{height} -> 校正后: {rect_width}x{rect_height}")
+        
+        # 构建与深度对齐的 camera_align 数据
+        # camera_align 使用校正后的左相机参数，时间戳与深度一致
+        camera_align_data = {
+            "topic": depth_topic,
+            "images": [],  # 占位，实际会在下面重新赋值
+            "timestamps": pair_depth["timestamps"],
+            "T_b_c": T_b_c_rect_list,
+            "K": K_rect.flatten().tolist(),
+            "width": rect_width,
+            "height": rect_height,
+        }
+        
+        # 按深度时间戳对齐左相机图像，并裁剪到有效区域
+        align_images = []
+        ts_left_array = np.array(left_timestamps)
+        roi = estimator._valid_roi
+        
+        for ts in pair_depth["timestamps"]:
+            # 找到对应的左相机图像
+            ts_diff = np.abs(ts_left_array - ts)
+            best_idx = np.argmin(ts_diff)
+            img = left_images[best_idx]
+            
+            # 校正图像
+            rect_img = estimator._rectify_image(img, "left")
+            
+            # 裁剪到有效区域 (ROI)
+            if roi is not None:
+                x, y, w, h = roi
+                rect_img = rect_img[y:y+h, x:x+w]
+            
+            align_images.append(rect_img)
+        
+        camera_align_data["images"] = align_images
+        
+        log.info(f"✅ 深度计算完成: {depth_topic} ({len(pair_depth['depth_maps'])} 帧)")
+        log.info(f"✅ 对齐相机数据: camera_align ({len(camera_align_data['images'])} 帧, {rect_width}x{rect_height})")
     
     log.info("📊 数据统计:")
     log.info(f"  - 轨迹数据: {len(traj)} 个topic")
@@ -236,7 +403,7 @@ def main():
         parse_and_view_camera_move(viewer, traj, camera_info)
         parse_and_view_camera_image(viewer, images)
 
-    viewer.flush()
+    # viewer.flush()
 
 if __name__ == "__main__":
     main()
