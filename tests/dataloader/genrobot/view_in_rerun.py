@@ -68,8 +68,8 @@ def find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3):
         log.warning(f"可用图像 topics: {list(images.keys())}")
         return None
     
-    width = left_info.get("width", 0)
-    height = left_info.get("height", 0)
+    width = 640
+    height = 480
     
     log.info(f"📷 配对双目相机: camera{left_cam_idx} (L) <-> camera{right_cam_idx} (R)")
     
@@ -85,6 +85,13 @@ def find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3):
 
 def _short_name(name: str, id = -1):
     return name.split('/')[id]
+
+def parse_and_view_depth_data(viewer: Viewer, depths):
+    for topic, data in depths.items():
+        name = _short_name(topic, -2)
+        depth_maps = np.array(data["depth_maps"], dtype=np.float32)
+        timestamps = np.array(data["timestamps"], dtype=np.float64)
+        viewer.view_depth_maps(name, depth_maps, timestamps)
 
 def parse_and_view_camera_image(viewer: Viewer, images):
     for topic, data in images.items():
@@ -239,7 +246,7 @@ def main():
     parser.add_argument('--urdf', type=str, 
                        default="descriptions/genrobot/ego_v2.urdf",
                        help='URDF文件路径')
-    parser.add_argument('--mode', type=str, choices=['traj', 'camera_frustum', 'both','camera_move','camera_data'], default='traj',
+    parser.add_argument('--mode', type=str, choices=['traj', 'camera_frustum', 'both','camera_move','camera_data','all'], default='traj',
                        help='可视化模式: traj(运动轨迹), camera_frustum(相机视锥体), camera_data(相机画面)')
     parser.add_argument('--time_alignment', type=str, choices=['nearest', 'linear'], default='nearest',
                        help='时间对齐方法: nearest(最近邻), linear(线性插值)')
@@ -402,6 +409,11 @@ def main():
     if args.mode == 'camera_move' and camera_info and traj:
         parse_and_view_camera_move(viewer, traj, camera_info)
         parse_and_view_camera_image(viewer, images)
+
+    if args.mode == 'all' and camera_info and traj and depth_data:
+        parse_and_view_camera_move(viewer, traj, camera_info)
+        parse_and_view_camera_image(viewer, images)
+        parse_and_view_depth_data(viewer, depth_data)
 
     # viewer.flush()
 

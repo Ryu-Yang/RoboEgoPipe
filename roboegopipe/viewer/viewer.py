@@ -297,7 +297,7 @@ class Viewer():
                       
         
 
-    def view_depth_maps(self, name: str, depth_maps: list, timestamps: list):
+    def view_depth_maps(self, name: str, depth_maps: np.ndarray, timestamps: np.ndarray):
         """
         显示深度图序列
         
@@ -308,6 +308,9 @@ class Viewer():
         """
         log.info(f"view_depth_maps: {name}: {len(depth_maps)} 帧")
 
+        log.info(f"depth_maps.shape: {depth_maps.shape}")
+        
+        print(f"depth_maps[0]: {depth_maps[0]}")
         if len(depth_maps) <= 1 or len(timestamps) <= 1:
             return
 

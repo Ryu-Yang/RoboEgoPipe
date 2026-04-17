@@ -523,6 +523,9 @@ class GenrobotdataLoader():
                                 self.trajectories[channel.topic]["orientations"].append(None)
                             self.trajectories[channel.topic]["timestamps"].append(ts_ns)
                             self.traj_count += 1
+
+                    if self.traj_count >=500:
+                        break
                             
                 except Exception as e:
                     log.warning(f"⚠️ 解析 {channel.topic} 失败: {e}")
