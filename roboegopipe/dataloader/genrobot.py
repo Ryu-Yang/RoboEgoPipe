@@ -4,6 +4,8 @@ import cv2
 import logging
 import numpy as np
 import re
+import av
+import io
 
 from collections import defaultdict
 from pathlib import Path
@@ -262,81 +264,111 @@ def extract_compressed_image(msg_obj, fallback_ts=None):
     return None
 
 
-def decode_compressed_image(image_data, format_str='h264'):
-    """解码压缩图像数据"""
-    try:
-        if not image_data:
-            return None
+# def decode_compressed_image(image_data, format_str='h264'):
+#     """解码压缩图像数据"""
+#     try:
+#         if not image_data:
+#             return None
             
-        # 根据格式选择解码方式
-        format_lower = format_str.lower()
+#         # 根据格式选择解码方式
+#         format_lower = format_str.lower()
         
-        if format_lower in ['h264', 'h265', 'hevc']:
-            # 使用OpenCV解码视频帧
-            # 将字节数据转换为numpy数组
-            np_arr = np.frombuffer(image_data, dtype=np.uint8)
+#         if format_lower in ['h264', 'h265', 'hevc']:
+#             # 使用OpenCV解码视频帧
+#             # 将字节数据转换为numpy数组
+#             np_arr = np.frombuffer(image_data, dtype=np.uint8)
             
-            # 创建解码器
-            if format_lower == 'h264':
-                fourcc = cv2.VideoWriter_fourcc(*'H264')
-            elif format_lower == 'h265' or format_lower == 'hevc':
-                fourcc = cv2.VideoWriter_fourcc(*'HEVC')
-            else:
-                fourcc = cv2.VideoWriter_fourcc(*'H264')
+#             # 创建解码器
+#             if format_lower == 'h264':
+#                 fourcc = cv2.VideoWriter_fourcc(*'H264')
+#             elif format_lower == 'h265' or format_lower == 'hevc':
+#                 fourcc = cv2.VideoWriter_fourcc(*'HEVC')
+#             else:
+#                 fourcc = cv2.VideoWriter_fourcc(*'H264')
             
-            # 尝试解码单帧
-            # 注意：对于H.264/H.265，可能需要更复杂的处理
-            # 这里使用简单的方法尝试解码
-            try:
-                # 方法1：尝试使用imdecode
-                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                if img is not None:
-                    return img
-            except:
-                pass
+#             # 尝试解码单帧
+#             # 注意：对于H.264/H.265，可能需要更复杂的处理
+#             # 这里使用简单的方法尝试解码
+#             try:
+#                 # 方法1：尝试使用imdecode
+#                 img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+#                 if img is not None:
+#                     return img
+#             except:
+#                 pass
             
-            # 方法2：尝试创建临时视频解码器
-            try:
-                # 创建临时文件来解码
-                import tempfile
-                with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as tmp:
-                    tmp.write(image_data)
-                    tmp.flush()
+#             # 方法2：尝试创建临时视频解码器
+#             try:
+#                 # 创建临时文件来解码
+#                 import tempfile
+#                 with tempfile.NamedTemporaryFile(suffix='.h264', delete=False) as tmp:
+#                     tmp.write(image_data)
+#                     tmp.flush()
                     
-                    cap = cv2.VideoCapture(tmp.name)
-                    if cap.isOpened():
-                        ret, frame = cap.read()
-                        cap.release()
-                        if ret:
-                            return frame
-            except:
-                pass
+#                     cap = cv2.VideoCapture(tmp.name)
+#                     if cap.isOpened():
+#                         ret, frame = cap.read()
+#                         cap.release()
+#                         if ret:
+#                             return frame
+#             except:
+#                 pass
             
-            # 如果以上方法都失败，返回原始数据
+#             # 如果以上方法都失败，返回原始数据
+#             return None
+            
+#         elif format_lower in ['jpeg', 'jpg']:
+#             # JPEG解码
+#             np_arr = np.frombuffer(image_data, dtype=np.uint8)
+#             img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+#             return img
+            
+#         elif format_lower in ['png']:
+#             # PNG解码
+#             np_arr = np.frombuffer(image_data, dtype=np.uint8)
+#             img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+#             return img
+            
+#         else:
+#             # 未知格式，尝试通用解码
+#             np_arr = np.frombuffer(image_data, dtype=np.uint8)
+#             img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+#             return img
+            
+#     except Exception as e:
+#         print(f"⚠️ 解码图像失败: {e}")
+#         return None
+
+def decode_compressed_image(image_data: bytes, format_str: str = 'h264') -> np.ndarray | None:
+    if not image_data:
+        return None
+
+    format_lower = format_str.lower()
+
+    try:
+        if format_lower in ['jpeg', 'jpg', 'png']:
+            np_arr = np.frombuffer(image_data, dtype=np.uint8)
+            return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        elif format_lower in ['h264', 'h265', 'hevc']:
+            # 使用 PyAV 解码
+            container = av.open(io.BytesIO(image_data), format=format_lower if format_lower != 'hevc' else 'hevc')
+            stream = container.streams.video[0]
+            
+            for frame in container.decode(stream):
+                # 转换为 BGR numpy 数组
+                img = frame.to_ndarray(format='bgr24')
+                return img
+            
             return None
-            
-        elif format_lower in ['jpeg', 'jpg']:
-            # JPEG解码
-            np_arr = np.frombuffer(image_data, dtype=np.uint8)
-            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            return img
-            
-        elif format_lower in ['png']:
-            # PNG解码
-            np_arr = np.frombuffer(image_data, dtype=np.uint8)
-            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            return img
-            
+
         else:
-            # 未知格式，尝试通用解码
             np_arr = np.frombuffer(image_data, dtype=np.uint8)
-            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            return img
-            
+            return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
     except Exception as e:
         print(f"⚠️ 解码图像失败: {e}")
         return None
-
 
 class GenrobotdataLoader():
     def __init__(self, mcap_file_path: str, topics_filter: list[str] | None = None):

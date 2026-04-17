@@ -16,6 +16,7 @@ dependencies = [
     "numpy",
     "rerun-sdk",
     "rich",
+    "av",
 ]
 
 [project.optional-dependencies]

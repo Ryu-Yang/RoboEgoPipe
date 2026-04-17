@@ -51,6 +51,109 @@ class Viewer():
         
         rr.set_time("timestamp", timestamp=timestamp_seconds)
 
+    def _preprocess_image(self, image: np.ndarray, height: int, width: int) -> np.ndarray | None:
+        """
+        将图像转换为 Rerun 兼容的格式 (HWC, uint8)
+        
+        Args:
+            image: 输入图像数据，可以是 1D (扁平), 2D (灰度), 或 3D (彩色/CHW/HWC)
+            height: 期望的图像高度
+            width: 期望的图像宽度
+        """
+        try:
+            # 1. 确保是 numpy 数组
+            if not isinstance(image, np.ndarray):
+                image = np.array(image)
+
+            # 2. 处理 1D 数组 (扁平化数据)
+            if image.ndim == 1:
+                total_pixels = height * width
+                if len(image) == total_pixels:
+                    # 假设是单通道灰度图
+                    image = image.reshape((height, width, 1))
+                elif len(image) == total_pixels * 3:
+                    # 假设是三通道 RGB/BGR
+                    image = image.reshape((height, width, 3))
+                elif len(image) == total_pixels * 4:
+                    # 假设是四通道 RGBA/BGRA
+                    image = image.reshape((height, width, 4))
+                else:
+                    log.warning(f"1D image length {len(image)} does not match expected dimensions {height}x{width} for 1, 3, or 4 channels.")
+                    return None
+
+            # 3. 处理数据类型：转换为 uint8
+            # 注意：reshape 后 dtype 不变，所以在这里统一处理 dtype
+            if image.dtype != np.uint8:
+                if image.dtype == np.float32 or image.dtype == np.float64:
+                    # 假设浮点数在 0-1 之间，如果是 0-255 则需要先判断最大值
+                    # 这里做一个简单的启发式判断：如果最大值 > 1.0，则不乘 255
+                    if image.max() <= 1.0:
+                        image = (image * 255).astype(np.uint8)
+                    else:
+                        image = image.astype(np.uint8)
+                else:
+                    image = image.astype(np.uint8)
+
+            # 4. 处理维度 (针对非 1D 输入，或 1D 解析后的后续处理)
+            if image.ndim == 2:
+                # 灰度图 (H, W) -> (H, W, 1)
+                image = image[:, :, np.newaxis]
+            elif image.ndim == 3:
+                # 检查是否是 CHW 格式 (C, H, W)
+                # 如果第一个维度是通道数 (1, 3, 4) 且小于第二个维度 (Height)
+                if image.shape[0] in [1, 3, 4] and image.shape[0] < image.shape[1]:
+                    # 转置为 HWC: (C, H, W) -> (H, W, C)
+                    image = np.transpose(image, (1, 2, 0))
+            
+            # 5. 最终校验形状
+            if image.shape[0] != height or image.shape[1] != width:
+                log.warning(f"Image shape {image.shape} does not match expected height={height}, width={width}. Resizing might be needed.")
+                # 可选：在这里添加 cv2.resize 逻辑，但通常直接报错或警告更好，避免静默错误
+
+            return image
+
+        except Exception as e:
+            log.error(f"Failed to preprocess image: {e}", exc_info=True)
+            return None
+
+    def view_image(self, name: str, images: np.ndarray, timestamps: np.ndarray, width, height):
+        """
+        显示图像,
+        
+        Args:
+            name: 图像名字
+            timestamps: 
+        """
+        log.info(f"view_image: {name}: {len(images)} 个点")
+
+        if len(images) <= 1 or len(timestamps) <= 1:
+            return
+            
+        # 创建轨迹实体路径
+        entity_path = f"world/cameras/{name}"
+        
+        # 按时间顺序记录每个点
+        for idx, (image, ts) in enumerate(zip(images, timestamps)):
+            self._set_timestamp(ts)
+
+            processed_image = self._preprocess_image(image, height, width)
+
+            if processed_image is None:
+                continue
+
+            rr.log(
+                f"{entity_path}/image",
+                rr.Image(processed_image)
+            )
+
+            # rr.log(
+            #     "camera/image", 
+            #     rr.Image(image), 
+            #     # 关键参数：指定压缩格式
+            #     # jpeg_quality: 0-100, 越高越清晰但体积越大
+            #     compress=rr.ImageFormat.JPEG(jpeg_quality=75) 
+            # )
+
     def view_trajectory(self, name: str, positions: np.ndarray, orientations: np.ndarray, timestamps: np.ndarray):
         """
         显示轨迹, 轨迹应该在世界坐标系下，世界坐标系以初始第一帧的头部正前方为iX，重力加速度方向相反为Z，Y与XZ正交，右手系

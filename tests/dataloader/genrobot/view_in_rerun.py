@@ -19,8 +19,15 @@ logging.basicConfig(
 log = logging.getLogger()
 
 
-def _short_name(name: str):
-    return name.split('/')[-1]
+def _short_name(name: str, id = -1):
+    return name.split('/')[id]
+
+def parse_and_view_camera_image(viewer: Viewer, images, camera_info):
+    for topic, data in images.items():
+        name = _short_name(topic, -2)
+        topic_images = np.array(data["data"], dtype=np.float32)
+        topic_timestamps = np.array(data["timestamps"], dtype=np.float64)
+        viewer.view_image(name, topic_images, topic_timestamps, width=1600, height=1300)
 
 def parse_and_view_traj_data(viewer: Viewer, traj):
     for topic, data in traj.items():
@@ -187,11 +194,12 @@ def main():
     dataLoader = GenrobotdataLoader(mcap_path)
     
     log.info("📖 读取数据...")
-    dataLoader.read_data()
+    dataLoader.read_data(decode_images=True)
     
     # 获取轨迹和相机数据
     traj = dataLoader.get_traj()
     camera_info = dataLoader.get_camera_info(from_urdf=True, urdf_path=args.urdf)
+    images = dataLoader.get_decoded_images()
     
     log.info("📊 数据统计:")
     log.info(f"  - 轨迹数据: {len(traj)} 个topic")
@@ -223,6 +231,7 @@ def main():
 
     if args.mode == 'camera_move' and camera_info and traj:
         parse_and_view_camera_move(viewer, traj, camera_info)
+        parse_and_view_camera_image(viewer, images, camera_info)
 
 
 if __name__ == "__main__":
