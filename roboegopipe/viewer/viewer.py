@@ -52,6 +52,9 @@ class Viewer():
         
         rr.set_time("timestamp", timestamp=timestamp_seconds)
 
+    def flush(self):
+        rr.flush() 
+
     def _preprocess_image(self, image: np.ndarray, height: int, width: int) -> np.ndarray | None:
         """
         将图像转换为 Rerun 兼容的格式 (HWC, uint8)
@@ -138,17 +141,6 @@ class Viewer():
         for idx, (image, ts) in enumerate(zip(images, timestamps)):
             self._set_timestamp(ts)
 
-            # processed_image = self._preprocess_image(image, height, width)
-
-            # if processed_image is None:
-            #     continue
-
-            # rr.log(
-            #     f"{entity_path}/image",
-            #     rr.Image(image)
-            # )
-
-            # log.ingo(f"image")
             retval, buffer = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             
             if retval:
