@@ -2,6 +2,7 @@ import time
 import logging
 import rerun as rr
 import numpy as np
+import cv2
 
 from roboegopipe.viewer.camera import create_camera_frustum, compute_camera_world_pose
 
@@ -116,12 +117,13 @@ class Viewer():
             log.error(f"Failed to preprocess image: {e}", exc_info=True)
             return None
 
-    def view_image(self, name: str, images: np.ndarray, timestamps: np.ndarray, width, height):
+    def view_image(self, name: str, images: np.ndarray, timestamps: np.ndarray):
         """
         显示图像,
         
         Args:
             name: 图像名字
+            images:(HWC)
             timestamps: 
         """
         log.info(f"view_image: {name}: {len(images)} 个点")
@@ -130,29 +132,31 @@ class Viewer():
             return
             
         # 创建轨迹实体路径
-        entity_path = f"world/cameras/{name}"
+        entity_path = f"encoded_images/{name}"
         
         # 按时间顺序记录每个点
         for idx, (image, ts) in enumerate(zip(images, timestamps)):
             self._set_timestamp(ts)
 
-            processed_image = self._preprocess_image(image, height, width)
+            # processed_image = self._preprocess_image(image, height, width)
 
-            if processed_image is None:
-                continue
-
-            rr.log(
-                f"{entity_path}/image",
-                rr.Image(processed_image)
-            )
+            # if processed_image is None:
+            #     continue
 
             # rr.log(
-            #     "camera/image", 
-            #     rr.Image(image), 
-            #     # 关键参数：指定压缩格式
-            #     # jpeg_quality: 0-100, 越高越清晰但体积越大
-            #     compress=rr.ImageFormat.JPEG(jpeg_quality=75) 
+            #     f"{entity_path}/image",
+            #     rr.Image(image)
             # )
+
+            # log.ingo(f"image")
+            retval, buffer = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            
+            if retval:
+                encoded_image = buffer.tobytes()
+                rr.log(
+                    f"{entity_path}",
+                    rr.EncodedImage(contents=encoded_image,media_type="image/jpeg")
+                )
 
     def view_trajectory(self, name: str, positions: np.ndarray, orientations: np.ndarray, timestamps: np.ndarray):
         """

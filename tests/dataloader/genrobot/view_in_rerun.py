@@ -25,7 +25,7 @@ def _short_name(name: str, id = -1):
 def parse_and_view_camera_image(viewer: Viewer, images, camera_info):
     for topic, data in images.items():
         name = _short_name(topic, -2)
-        topic_images = np.array(data["data"], dtype=np.float32)
+        topic_images = np.array(data["images"], dtype=np.float32)
         topic_timestamps = np.array(data["timestamps"], dtype=np.float64)
         viewer.view_image(name, topic_images, topic_timestamps, width=1600, height=1300)
 
@@ -199,7 +199,10 @@ def main():
     # 获取轨迹和相机数据
     traj = dataLoader.get_traj()
     camera_info = dataLoader.get_camera_info(from_urdf=True, urdf_path=args.urdf)
-    images = dataLoader.get_decoded_images()
+    
+    # 解码图像（如果需要）
+    log.info("🔄 解码图像数据...")
+    images = dataLoader.decode_all_images()
     
     log.info("📊 数据统计:")
     log.info(f"  - 轨迹数据: {len(traj)} 个topic")

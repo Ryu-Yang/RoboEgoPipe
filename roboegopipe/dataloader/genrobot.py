@@ -370,6 +370,80 @@ def decode_compressed_image(image_data: bytes, format_str: str = 'h264') -> np.n
         print(f"⚠️ 解码图像失败: {e}")
         return None
 
+
+class BatchVideoDecoder:
+    """批量视频解码器，专门处理H.264/H.265的批量解码"""
+    def __init__(self, format_str='h264'):
+        self.format = format_str.lower()
+        
+    def decode_frames(self, frames_data: list[bytes], target_size: tuple = (640, 480)) -> list[np.ndarray]:
+        """批量解码视频帧
+        
+        Args:
+            frames_data: 帧数据列表，每个元素是bytes
+            
+        Returns:
+            解码后的图像列表
+        """
+        decoded_frames = []
+        
+        if not frames_data:
+            return decoded_frames
+            
+        if self.format in ['h264', 'h265', 'hevc']:
+            # 将所有帧数据合并为一个连续的字节流
+            # 注意：假设frames_data中的每个元素都是完整的NAL单元
+            combined_data = b''.join(frames_data)
+            
+            try:
+                # 使用PyAV进行连续解码
+                container_format = self.format if self.format != 'hevc' else 'hevc'
+                container = av.open(io.BytesIO(combined_data), format=container_format)
+                
+                if not container.streams.video:
+                    print(f"⚠️ 未找到视频流，格式: {self.format}")
+                    return decoded_frames
+                    
+                stream = container.streams.video[0]
+                
+                for frame in container.decode(stream):
+                    try:
+                        img = frame.to_ndarray(format='bgr24')
+
+                        resized_img = cv2.resize(img, target_size, interpolation=cv2.INTER_AREA)
+                        
+                        decoded_frames.append(resized_img)
+                    except Exception as e:
+                        print(f"⚠️ 转换帧数据失败: {e}")
+                        continue
+                        
+            except Exception as e:
+                print(f"⚠️ 批量解码失败 ({self.format}): {e}")
+                # 尝试逐帧解码作为后备方案
+                return self._decode_frames_fallback(frames_data)
+                
+        else:
+            # 对于非视频格式，使用逐帧解码
+            return self._decode_frames_fallback(frames_data)
+            
+        return decoded_frames
+    
+    def _decode_frames_fallback(self, frames_data: list[bytes]) -> list[np.ndarray]:
+        """后备方案：逐帧解码"""
+        decoded_frames = []
+        
+        for i, frame_data in enumerate(frames_data):
+            try:
+                img = decode_compressed_image(frame_data, self.format)
+                if img is not None:
+                    decoded_frames.append(img)
+            except Exception as e:
+                print(f"⚠️ 解码第 {i} 帧失败: {e}")
+                continue
+                
+        return decoded_frames
+
+
 class GenrobotdataLoader():
     def __init__(self, mcap_file_path: str, topics_filter: list[str] | None = None):
         self.mcap_file_path = mcap_file_path
@@ -396,9 +470,12 @@ class GenrobotdataLoader():
         读取MCAP文件数据
         
         Args:
-            decode_images: 是否立即解码图像数据（可能会消耗较多内存）
+            decode_images: 是否标记需要解码图像数据（实际解码在后续批量进行）
         """
         log.info(f"📖 正在读取 MCAP 文件: {Path(self.mcap_file_path).name}")
+        
+        # 存储是否需要解码的标志
+        self._need_decode_images = decode_images
 
         # 读取并解析数据
         with open(self.mcap_file_path, "rb") as f:
@@ -433,13 +510,6 @@ class GenrobotdataLoader():
                             self.compressed_images[channel.topic]["frame_id"].append(image_data['frame_id'])
                             self.compressed_images[channel.topic]["timestamps"].append(image_data['timestamp'])
                             self.image_count += 1
-                            
-                            # 如果需要解码图像
-                            if decode_images:
-                                decoded_img = decode_compressed_image(image_data['data'], image_data['format'])
-                                if decoded_img is not None:
-                                    self.decoded_images[channel.topic]["images"].append(decoded_img)
-                                    self.decoded_images[channel.topic]["timestamps"].append(image_data['timestamp'])
                     
                     elif is_pose_topic:
                         # 处理位姿数据
@@ -530,8 +600,12 @@ class GenrobotdataLoader():
         return self.decoded_images
     
     def decode_all_images(self):
-        """解码所有压缩图像"""
-        print("🔄 开始解码所有压缩图像...")
+        """解码所有压缩图像（使用批量解码）"""
+        return self.decode_images_batch()
+    
+    def decode_images_batch(self):
+        """批量解码所有压缩图像（优化版）"""
+        print("🔄 开始批量解码所有压缩图像...")
         total_decoded = 0
         
         for topic, data in self.compressed_images.items():
@@ -539,23 +613,60 @@ class GenrobotdataLoader():
             formats = data["format"]
             timestamps = data["timestamps"]
             
-            decoded_list = []
-            timestamp_list = []
+            if not images:
+                continue
             
-            for i, (img_data, fmt) in enumerate(zip(images, formats)):
-                decoded_img = decode_compressed_image(img_data, fmt)
-                if decoded_img is not None:
-                    decoded_list.append(decoded_img)
-                    timestamp_list.append(timestamps[i])
-                    total_decoded += 1
+            # 获取话题的短名称用于日志
+            short_name = topic.split('/')[-2] if len(topic.split('/')) >= 2 else topic
+            
+            # 检查格式是否一致
+            format_set = set(formats)
+            if len(format_set) > 1:
+                print(f"⚠️ 话题 {short_name} 包含多种格式: {format_set}")
+                # 按格式分组处理
+                from collections import defaultdict
+                format_groups = defaultdict(list)
+                for i, fmt in enumerate(formats):
+                    format_groups[fmt].append((i, images[i], timestamps[i]))
                 
-                if (i + 1) % 10 == 0:
-                    print(f"  解码进度: {i+1}/{len(images)}")
+                decoded_list = []
+                timestamp_list = []
+                
+                for fmt, group in format_groups.items():
+                    indices = [item[0] for item in group]
+                    frame_data = [item[1] for item in group]
+                    group_timestamps = [item[2] for item in group]
+                    
+                    decoder = BatchVideoDecoder(fmt)
+                    decoded_frames = decoder.decode_frames(frame_data)
+                    
+                    # 按原始顺序重新组合
+                    for idx, frame, ts in zip(indices, decoded_frames, group_timestamps):
+                        decoded_list.append((idx, frame))
+                        timestamp_list.append((idx, ts))
+                        total_decoded += 1
+                
+                # 排序
+                decoded_list.sort(key=lambda x: x[0])
+                timestamp_list.sort(key=lambda x: x[0])
+                
+                self.decoded_images[topic]["images"] = [frame for _, frame in decoded_list]
+                self.decoded_images[topic]["timestamps"] = [ts for _, ts in timestamp_list]
+            else:
+                # 单一格式，直接批量解码
+                fmt = formats[0]
+                decoder = BatchVideoDecoder(fmt)
+                decoded_frames = decoder.decode_frames(images)
+                
+                self.decoded_images[topic]["images"] = decoded_frames
+                # 确保时间戳数量与解码图像数量一致
+                self.decoded_images[topic]["timestamps"] = timestamps[:len(decoded_frames)]
+                total_decoded += len(decoded_frames)
             
-            self.decoded_images[topic]["images"] = decoded_list
-            self.decoded_images[topic]["timestamps"] = timestamp_list
+            decoded_count = len(self.decoded_images[topic]["images"])
+            print(f"  ✅ {short_name}: 解码了 {decoded_count}/{len(images)} 张图像")
         
-        print(f"✅ 成功解码 {total_decoded} 张图像")
+        print(f"✅ 成功批量解码 {total_decoded} 张图像")
         return self.decoded_images
     
     def get_image_by_timestamp(self, topic, timestamp_ns, tolerance_ns=1000000):
