@@ -10,7 +10,7 @@ from roboegopipe.viewer.camera import create_camera_frustum, compute_camera_worl
 from scipy.spatial.transform import Rotation as R
 import logging
 from rich.logging import RichHandler
-
+from roboegopipe.mediapipe.detector import Detector
 
 logging.basicConfig(
     level=logging.INFO,                    # 设置日志级别
@@ -85,6 +85,22 @@ def find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3):
 
 def _short_name(name: str, id = -1):
     return name.split('/')[id]
+
+def parse_and_view_hand_detect(viewer: Viewer, images):
+    detector = Detector()
+    for topic, data in images.items():
+        if 'camera2' in topic:
+            name = _short_name(topic, -2)+"_detected"
+            match_images = np.array(data["images"], dtype=np.float32)
+            match_timestamps = np.array(data["timestamps"], dtype=np.float64)
+
+            detected_images = []
+            for i in range(len(match_images)):
+                detected_image = detector.detect(match_images[i], match_timestamps[i])
+                detected_images.append(detected_image)
+
+            viewer.view_image(name, detected_images, match_timestamps)
+
 
 def parse_and_view_depth_data(viewer: Viewer, depths):
     for topic, data in depths.items():
@@ -241,7 +257,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='可视化MCAP文件中的轨迹和相机数据')
     parser.add_argument('--mcap_path', type=str, 
-                       default="/home/ryu-yang/Documents/Datasets/Domestic_Services/Living_Room/Organization/Organize_desktop/3a8f559dfb0847c8be710fa31c37758a.mcap",
+                       default="data/3a8f559dfb0847c8be710fa31c37758a.mcap",
                        help='MCAP文件路径')
     parser.add_argument('--urdf', type=str, 
                        default="descriptions/genrobot/ego_v2.urdf",
@@ -414,6 +430,7 @@ def main():
         parse_and_view_camera_move(viewer, traj, camera_info)
         parse_and_view_camera_image(viewer, images)
         parse_and_view_depth_data(viewer, depth_data)
+        parse_and_view_hand_detect(viewer, images)
 
     # viewer.flush()
 
