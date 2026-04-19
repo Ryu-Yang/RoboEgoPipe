@@ -47,24 +47,11 @@ def creat_matrix_from_pose(pose):
     T[:3, 3] = pos
     return T
 
-
-def generate_ds_undistort_map(width, height, fu, fv, cu, cv, xi, alpha):
+def generate_ds_map_numerical(width, height, fu, fv, cu, cv, xi, alpha):
     """
-    使用 DS (Double Sphere) 模型生成去畸变映射表。
-    
-    基于数值方法生成映射表，原理：对于每个理想像素，寻找一个畸变像素，
-    使其投影后最接近该理想像素的归一化坐标。
-    
-    Args:
-        width: 图像宽度
-        height: 图像高度
-        fu, fv: 焦距 (x, y 方向)
-        cu, cv: 主点坐标
-        xi: DS 模型参数 (unified parameter)
-        alpha: DS 模型参数 (distortion parameter)
-    
-    Returns:
-        map_x, map_y: 去畸变映射表
+    使用数值方法生成映射表，避免公式推导错误。
+    原理：对于每个理想像素，寻找一个畸变像素，使其投影后最接近该理想像素的归一化坐标。
+    为了加速，使用牛顿法或直接利用近似解作为初值。
     """
     # 创建理想网格
     u_out, v_out = np.meshgrid(np.arange(width), np.arange(height))
@@ -72,27 +59,91 @@ def generate_ds_undistort_map(width, height, fu, fv, cu, cv, xi, alpha):
     v_out = v_out.astype(np.float64)
     
     # 理想归一化坐标
-    x = (u_out - cu) / fu
-    y = (v_out - cv) / fv
+    x_target = (u_out - cu) / fu
+    y_target = (v_out - cv) / fv
+    
+    # 初始猜测：假设畸变很小，原图坐标约等于理想坐标
+    u_curr = u_out.copy()
+    v_curr = v_out.copy()
+    
+    # 牛顿迭代参数
+    iterations = 5
+    for _ in range(iterations):
+        un = (u_curr - cu) / fu
+        vn = (v_curr - cv) / fv
+        r2 = un*un + vn*vn
+
+        pass
+    
+    u_out_f = u_out.astype(np.float32)
+    v_out_f = v_out.astype(np.float32)
+    
+    x = (u_out_f - cu) / fu
+    y = (v_out_f - cv) / fv
     z = np.ones_like(x)
     
-    # DS 模型计算
-    d1 = np.sqrt(x * x + y * y + z * z)
+    d1 = np.sqrt(x*x + y*y + z*z)
     
     # 变体公式：交换 alpha 权重
     mz = (1.0 - alpha) * d1 + alpha * z
     
-    d2 = np.sqrt(x * x + y * y + mz * mz)
+    d2 = np.sqrt(x*x + y*y + mz*mz)
     
     # 变体分母
     denominator = (1.0 - alpha) * d2 + alpha * (xi * d1 + z)
+    
     denominator = np.clip(denominator, 1e-8, None)
     
-    # 计算畸变图像坐标
     u_in = fu * x / denominator + cu
     v_in = fv * y / denominator + cv
     
-    return u_in.astype(np.float32), v_in.astype(np.float32)
+    return  u_in.astype(np.float32), v_in.astype(np.float32)
+
+# def generate_ds_undistort_map(width, height, fu, fv, cu, cv, xi, alpha):
+#     """
+#     使用 DS (Double Sphere) 模型生成去畸变映射表。
+    
+#     基于数值方法生成映射表，原理：对于每个理想像素，寻找一个畸变像素，
+#     使其投影后最接近该理想像素的归一化坐标。
+    
+#     Args:
+#         width: 图像宽度
+#         height: 图像高度
+#         fu, fv: 焦距 (x, y 方向)
+#         cu, cv: 主点坐标
+#         xi: DS 模型参数 (unified parameter)
+#         alpha: DS 模型参数 (distortion parameter)
+    
+#     Returns:
+#         map_x, map_y: 去畸变映射表
+#     """
+#     # 创建理想网格
+#     u_out, v_out = np.meshgrid(np.arange(width), np.arange(height))
+#     u_out = u_out.astype(np.float64)
+#     v_out = v_out.astype(np.float64)
+    
+#     # 理想归一化坐标
+#     x = (u_out - cu) / fu
+#     y = (v_out - cv) / fv
+#     z = np.ones_like(x)
+    
+#     # DS 模型计算
+#     d1 = np.sqrt(x * x + y * y + z * z)
+    
+#     # 变体公式：交换 alpha 权重
+#     mz = (1.0 - alpha) * d1 + alpha * z
+    
+#     d2 = np.sqrt(x * x + y * y + mz * mz)
+    
+#     # 变体分母
+#     denominator = (1.0 - alpha) * d2 + alpha * (xi * d1 + z)
+#     denominator = np.clip(denominator, 1e-8, None)
+    
+#     # 计算畸变图像坐标
+#     u_in = fu * x / denominator + cu
+#     v_in = fv * y / denominator + cv
+    
+#     return u_in.astype(np.float32), v_in.astype(np.float32)
 
 
 class StereoEstimator:
@@ -196,17 +247,17 @@ class StereoEstimator:
             fu1, fv1, cx1, cy1, xi1, alpha1 = D1
             fu2, fv2, cx2, cy2, xi2, alpha2 = D2
             
-            # 使用 DS 参数构建内参矩阵
-            K1 = np.array([
-                [fu1, 0, cx1],
-                [0, fv1, cy1],
-                [0, 0, 1]
-            ], dtype=np.float64)
-            K2 = np.array([
-                [fu2, 0, cx2],
-                [0, fv2, cy2],
-                [0, 0, 1]
-            ], dtype=np.float64)
+            # # 使用 DS 参数构建内参矩阵
+            # K1 = np.array([
+            #     [fu1, 0, cx1],
+            #     [0, fv1, cy1],
+            #     [0, 0, 1]
+            # ], dtype=np.float64)
+            # K2 = np.array([
+            #     [fu2, 0, cx2],
+            #     [0, fv2, cy2],
+            #     [0, 0, 1]
+            # ], dtype=np.float64)
             
             # 保存 DS 参数用于后续去畸变
             self._ds_params = {
@@ -252,8 +303,8 @@ class StereoEstimator:
         
         if self._is_ds_model:
             # DS 模型：先生成去畸变映射，然后与立体校正映射组合
-            ds_map_left = generate_ds_undistort_map(width, height, **self._ds_params["left"])
-            ds_map_right = generate_ds_undistort_map(width, height, **self._ds_params["right"])
+            ds_map_left = generate_ds_map_numerical(width, height, **self._ds_params["left"])
+            ds_map_right = generate_ds_map_numerical(width, height, **self._ds_params["right"])
             
             # 保存 DS 去畸变映射和立体校正映射
             self._rect_maps = {
@@ -352,21 +403,24 @@ class StereoEstimator:
         if self._is_ds_model:
             # DS 模型：先应用去畸变，再应用立体校正
             # 第一步：去畸变
-            if image.ndim == 3:
-                channels = []
-                for c in range(image.shape[2]):
-                    channel = cv2.remap(
-                        image[:, :, c], 
-                        maps["ds_map_x"], maps["ds_map_y"], 
-                        cv2.INTER_LINEAR, cv2.BORDER_CONSTANT
-                    )
-                    channels.append(channel)
-                undistorted = np.stack(channels, axis=2)
-            else:
-                undistorted = cv2.remap(
-                    image, maps["ds_map_x"], maps["ds_map_y"], 
-                    cv2.INTER_LINEAR, cv2.BORDER_CONSTANT
-                )
+
+            # if image.ndim == 3:
+            #     channels = []
+            #     for c in range(image.shape[2]):
+            #         channel = cv2.remap(
+            #             image[:, :, c], 
+            #             maps["ds_map_x"], maps["ds_map_y"], 
+            #             cv2.INTER_LINEAR, cv2.BORDER_CONSTANT
+            #         )
+            #         channels.append(channel)
+            #     undistorted = np.stack(channels, axis=2)
+            # else:
+            undistorted = cv2.remap(
+                image, maps["ds_map_x"], maps["ds_map_y"], 
+                cv2.INTER_LINEAR, cv2.BORDER_CONSTANT
+            )
+
+            return undistorted
             
             # 第二步：立体校正（需要计算校正映射）
             rect_params = self._stereo_rect_params
@@ -400,19 +454,19 @@ class StereoEstimator:
                 return np.stack(channels, axis=2)
             else:
                 return cv2.remap(undistorted, rect_map_x, rect_map_y, cv2.INTER_LINEAR)
-        else:
-            # 标准 OpenCV 模型
-            # 处理灰度图
-            if image.ndim == 2:
-                rectified = cv2.remap(image, maps["map_x"], maps["map_y"], cv2.INTER_LINEAR)
-                return rectified
+        # else:
+        #     # 标准 OpenCV 模型
+        #     # 处理灰度图
+        #     if image.ndim == 2:
+        #         rectified = cv2.remap(image, maps["map_x"], maps["map_y"], cv2.INTER_LINEAR)
+        #         return rectified
 
-            # 处理彩色图
-            channels = []
-            for c in range(image.shape[2]):
-                channel = cv2.remap(image[:, :, c], maps["map_x"], maps["map_y"], cv2.INTER_LINEAR)
-                channels.append(channel)
-            return np.stack(channels, axis=2)
+        #     # 处理彩色图
+        #     channels = []
+        #     for c in range(image.shape[2]):
+        #         channel = cv2.remap(image[:, :, c], maps["map_x"], maps["map_y"], cv2.INTER_LINEAR)
+        #         channels.append(channel)
+        #     return np.stack(channels, axis=2)
 
     def compute_disparity(self, img_left, img_right):
         """
@@ -523,9 +577,19 @@ class StereoEstimator:
             ts_used = ts_left
 
             try:
+                cv2.imshow("origin Left", img_left)
+                cv2.imshow("origin Right", img_right)
+
                 # 校正图像
                 rect_left = self._rectify_image(img_left, "left")
                 rect_right = self._rectify_image(img_right, "right")
+
+                # 显示校正后的左右图像
+                cv2.imshow("Rectified Left", rect_left)
+                cv2.imshow("Rectified Right", rect_right)
+
+                # 等待用户按键，按任意键后关闭所有窗口
+                cv2.waitKey(1)
 
                 # 计算深度
                 depth = self.compute_depth(rect_left, rect_right)
