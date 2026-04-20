@@ -68,8 +68,8 @@ def find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3):
         log.warning(f"可用图像 topics: {list(images.keys())}")
         return None
     
-    width = 640
-    height = 480
+    width = 960
+    height = 720
     
     log.info(f"📷 配对双目相机: camera{left_cam_idx} (L) <-> camera{right_cam_idx} (R)")
     

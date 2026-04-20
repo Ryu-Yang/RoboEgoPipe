@@ -16,7 +16,10 @@ class Detector():
         self.options = mp.tasks.vision.HandLandmarkerOptions(
             base_options=self.base_options,
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
-            num_hands=2
+            num_hands=2,
+            min_hand_detection_confidence=0.3,
+            min_hand_presence_confidence=0.3,
+            min_tracking_confidence=0.3
             )
         self.landmarker = mp.tasks.vision.HandLandmarker.create_from_options(self.options)
 
@@ -44,6 +47,8 @@ class Detector():
         hand_landmarker_result = self.landmarker.detect_for_video(mp_image, timestamp_ms_int)
 
         annotated_image = draw_landmarks_on_image(mp_image.numpy_view(), hand_landmarker_result)
+
+        annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
 
         return annotated_image
 

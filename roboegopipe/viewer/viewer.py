@@ -141,7 +141,7 @@ class Viewer():
         for idx, (image, ts) in enumerate(zip(images, timestamps)):
             self._set_timestamp(ts)
 
-            retval, buffer = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            retval, buffer = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
             
             if retval:
                 encoded_image = buffer.tobytes()

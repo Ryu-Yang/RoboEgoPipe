@@ -376,7 +376,7 @@ class BatchVideoDecoder:
     def __init__(self, format_str='h264'):
         self.format = format_str.lower()
         
-    def decode_frames(self, frames_data: list[bytes], target_size: tuple = (640, 480)) -> list[np.ndarray]:
+    def decode_frames(self, frames_data: list[bytes], target_size: tuple = (960, 720)) -> list[np.ndarray]:
         """批量解码视频帧
         
         Args:
