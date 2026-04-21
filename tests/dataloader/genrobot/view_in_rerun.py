@@ -68,8 +68,8 @@ def find_stereo_pair(camera_info, images, left_cam_idx=2, right_cam_idx=3):
         log.warning(f"可用图像 topics: {list(images.keys())}")
         return None
     
-    width = 960
-    height = 720
+    width = 1600
+    height = 1300
     
     log.info(f"📷 配对双目相机: camera{left_cam_idx} (L) <-> camera{right_cam_idx} (R)")
     
@@ -257,7 +257,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='可视化MCAP文件中的轨迹和相机数据')
     parser.add_argument('--mcap_path', type=str, 
-                       default="data/3a8f559dfb0847c8be710fa31c37758a.mcap",
+                       default="data/3ff3c88df0e24b88a6a36232763bf21b.mcap",
                        help='MCAP文件路径')
     parser.add_argument('--urdf', type=str, 
                        default="descriptions/genrobot/ego_v2.urdf",

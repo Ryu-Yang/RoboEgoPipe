@@ -149,10 +149,10 @@ def generate_ds_map_numerical(width, height, fu, fv, cu, cv, xi, alpha):
 class StereoEstimator:
     def __init__(
         self,
-        num_disparities=64,
-        block_size=11,
+        num_disparities=16,
+        block_size=15,
         min_disparity=0,
-        uniqueness_ratio=10,
+        uniqueness_ratio=5,
         speckle_window_size=100,
         speckle_max_size=1000,
         pre_filter_cap=31,
@@ -247,23 +247,25 @@ class StereoEstimator:
             fu1, fv1, cx1, cy1, xi1, alpha1 = D1
             fu2, fv2, cx2, cy2, xi2, alpha2 = D2
             
-            # # 使用 DS 参数构建内参矩阵
-            # K1 = np.array([
-            #     [fu1, 0, cx1],
-            #     [0, fv1, cy1],
-            #     [0, 0, 1]
-            # ], dtype=np.float64)
-            # K2 = np.array([
-            #     [fu2, 0, cx2],
-            #     [0, fv2, cy2],
-            #     [0, 0, 1]
-            # ], dtype=np.float64)
+            # 使用 DS 参数构建内参矩阵，确保 stereoRectify 使用正确的内参
+            K1 = np.array([
+                [fu1, 0, cx1],
+                [0, fv1, cy1],
+                [0, 0, 1]
+            ], dtype=np.float64)
+            K2 = np.array([
+                [fu2, 0, cx2],
+                [0, fv2, cy2],
+                [0, 0, 1]
+            ], dtype=np.float64)
             
             # 保存 DS 参数用于后续去畸变
             self._ds_params = {
                 "left": {"fu": fu1, "fv": fv1, "cu": cx1, "cv": cy1, "xi": xi1, "alpha": alpha1},
                 "right": {"fu": fu2, "fv": fv2, "cu": cx2, "cv": cy2, "xi": xi2, "alpha": alpha2},
             }
+
+            print(f"self._ds_params: {self._ds_params}")
             
             # 对于 stereoRectify，使用零畸变
             D1 = np.zeros(5, dtype=np.float64)
@@ -420,7 +422,7 @@ class StereoEstimator:
                 cv2.INTER_LINEAR, cv2.BORDER_CONSTANT
             )
 
-            return undistorted
+            # return undistorted
             
             # 第二步：立体校正（需要计算校正映射）
             rect_params = self._stereo_rect_params
@@ -442,18 +444,18 @@ class StereoEstimator:
             )
             
             # 应用立体校正
-            if undistorted.ndim == 3:
-                channels = []
-                for c in range(undistorted.shape[2]):
-                    channel = cv2.remap(
-                        undistorted[:, :, c], 
-                        rect_map_x, rect_map_y, 
-                        cv2.INTER_LINEAR
-                    )
-                    channels.append(channel)
-                return np.stack(channels, axis=2)
-            else:
-                return cv2.remap(undistorted, rect_map_x, rect_map_y, cv2.INTER_LINEAR)
+            # if undistorted.ndim == 3:
+            #     channels = []
+            #     for c in range(undistorted.shape[2]):
+            #         channel = cv2.remap(
+            #             undistorted[:, :, c], 
+            #             rect_map_x, rect_map_y, 
+            #             cv2.INTER_LINEAR
+            #         )
+            #         channels.append(channel)
+            #     return np.stack(channels, axis=2)
+            # else:
+            return cv2.remap(undistorted, rect_map_x, rect_map_y, cv2.INTER_LINEAR)
         # else:
         #     # 标准 OpenCV 模型
         #     # 处理灰度图
@@ -504,13 +506,14 @@ class StereoEstimator:
 
         return disparity
 
-    def compute_depth(self, img_left, img_right):
+    def compute_depth(self, img_left, img_right, debug=False):
         """
         计算单帧深度图
 
         Args:
             img_left: 左校正图像
             img_right: 右校正图像
+            debug: 是否输出调试信息
 
         Returns:
             depth: 深度图 (float32)，无效深度为 0 或 inf
@@ -520,18 +523,50 @@ class StereoEstimator:
         # 将 16 位视差转换为浮点视差
         disparity_float = disparity.astype(np.float32) / 16.0
 
-        # 使用 Q 矩阵计算深度
-        # depth = Q[2,3] / (disparity + Q[3,2])
-        # 注意：OpenCV 的 reprojectImageTo3D 也可以，但直接计算更高效
+        if debug:
+            # 输出视差统计信息
+            valid_disp = disparity_float[disparity_float > 0]
+            log.info(f"📊 视差统计: 最小={disparity_float.min():.2f}, "
+                     f"最大={disparity_float.max():.2f}, "
+                     f"均值={disparity_float.mean():.2f}, "
+                     f"有效像素数={len(valid_disp)}/{disparity_float.size} "
+                     f"({100*len(valid_disp)/disparity_float.size:.1f}%)")
+            log.info(f"📊 Q 矩阵:\n{self._Q}")
+            log.info(f"📊 Q[2,3]={self._Q[2,3]:.4f}, Q[3,2]={self._Q[3,2]:.6f}")
+
+        # 使用 Q 矩阵手动计算深度
+        # 根据 OpenCV Q 矩阵标准格式:
+        # Q = [[1, 0, 0, -cx],
+        #      [0, 1, 0, -cy],
+        #      [0, 0, 0,  f ],
+        #      [0, 0, -1/Tx, 0]]
+        # 深度公式: depth = Q[2,3] / (disparity * (-Q[3,2]))
+        #         = f * Tx / disparity
         depth = np.zeros_like(disparity_float)
 
         # 只处理有效视差（> 0）
         valid_mask = disparity_float > 0
         if np.any(valid_mask):
-            depth[valid_mask] = self._Q[2, 3] / (disparity_float[valid_mask] + self._Q[3, 2])
+            # 使用乘法而不是加法：depth = Q[2,3] / (disparity * (-Q[3,2]))
+            depth[valid_mask] = self._Q[2, 3] / (disparity_float[valid_mask] * (-self._Q[3, 2]))
+
+        if debug:
+            valid_depth = depth[depth > 0]
+            if len(valid_depth) > 0:
+                log.info(f"📊 深度统计: 最小={valid_depth.min():.3f}m, "
+                         f"最大={valid_depth.max():.3f}m, "
+                         f"均值={valid_depth.mean():.3f}m, "
+                         f"有效像素数={len(valid_depth)}/{depth.size} "
+                         f"({100*len(valid_depth)/depth.size:.1f}%)")
+            else:
+                log.warning("⚠️ 没有有效的深度值！")
+
+        # 处理无效值
+        invalid_mask = ~np.isfinite(depth)
+        depth[invalid_mask] = 0.0
 
         # 处理异常值
-        max_valid_depth = 10.0  # 10 米最大深度
+        max_valid_depth = 20.0  # 20 米最大深度
         depth[depth > max_valid_depth] = 0.0
         depth[depth < 0] = 0.0
 
@@ -577,22 +612,22 @@ class StereoEstimator:
             ts_used = ts_left
 
             try:
-                cv2.imshow("origin Left", img_left)
-                cv2.imshow("origin Right", img_right)
+                # cv2.imshow("origin Left", img_left)
+                # cv2.imshow("origin Right", img_right)
 
                 # 校正图像
                 rect_left = self._rectify_image(img_left, "left")
                 rect_right = self._rectify_image(img_right, "right")
 
-                # 显示校正后的左右图像
-                cv2.imshow("Rectified Left", rect_left)
-                cv2.imshow("Rectified Right", rect_right)
+                # # 显示校正后的左右图像
+                # cv2.imshow("Rectified Left", rect_left)
+                # cv2.imshow("Rectified Right", rect_right)
 
-                # 等待用户按键，按任意键后关闭所有窗口
-                cv2.waitKey(1)
+                # # 等待用户按键，按任意键后关闭所有窗口
+                # cv2.waitKey(1)
 
                 # 计算深度
-                depth = self.compute_depth(rect_left, rect_right)
+                depth = self.compute_depth(rect_left, rect_right, True)
                 depth_maps.append(depth)
                 depth_timestamps.append(ts_used)
 
@@ -602,6 +637,8 @@ class StereoEstimator:
             except Exception as e:
                 log.warning(f"⚠️ 计算帧 {i} 深度失败: {e}")
                 continue
+
+        # cv2.waitKey(0)
 
         log.info(f"✅ 批量深度计算完成，共 {len(depth_maps)} 帧")
 

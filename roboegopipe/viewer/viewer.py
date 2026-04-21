@@ -321,7 +321,7 @@ class Viewer():
 
             # 将深度图转换为可视化图像（归一化到 0-255）
             # 深度范围 0-5m
-            max_depth = 5.0
+            max_depth = 10.0
             depth_normalized = np.clip(depth, 0, max_depth) / max_depth
             depth_colormap = cv2.applyColorMap(
                 (depth_normalized * 255).astype(np.uint8), cv2.COLORMAP_JET
