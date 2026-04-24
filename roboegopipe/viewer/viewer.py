@@ -8,6 +8,33 @@ from roboegopipe.viewer.camera import create_camera_frustum, compute_camera_worl
 
 log = logging.getLogger()
 
+# MediaPipe Hand Landmarks Connections
+# 21 landmarks per hand, indexed 0-20
+HAND_CONNECTIONS = [
+    # Wrist to thumb base
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    # Wrist to index finger
+    (0, 5), (5, 6), (6, 7), (7, 8),
+    # Wrist to middle finger
+    (0, 9), (9, 10), (10, 11), (11, 12),
+    # Wrist to ring finger
+    (0, 13), (13, 14), (14, 15), (15, 16),
+    # Wrist to pinky finger
+    (0, 17), (17, 18), (18, 19), (19, 20),
+    # Palm connections
+    (5, 9), (9, 13), (13, 17),
+]
+
+# Hand landmark names for reference
+HAND_LANDMARK_NAMES = [
+    "WRIST",
+    "THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP",
+    "INDEX_MCP", "INDEX_PIP", "INDEX_DIP", "INDEX_TIP",
+    "MIDDLE_MCP", "MIDDLE_PIP", "MIDDLE_DIP", "MIDDLE_TIP",
+    "RING_MCP", "RING_PIP", "RING_DIP", "RING_TIP",
+    "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP",
+]
+
 class Viewer():
     def __init__(self):
         rr.init("RoboEgoPipe Viewer", spawn=True)
@@ -296,6 +323,136 @@ class Viewer():
                 create_camera_frustum(f"{entity_path}/frame", K, width, height, color)
                       
         
+
+    def view_hand_landmarks(
+        self,
+        hand_landmarks_list: list,
+        handedness_list: list,
+        timestamps: np.ndarray,
+        camera_pose: dict = None,
+        scale: float = 0.1,
+    ):
+        """
+        在 Rerun world 坐标系中可视化手部关键点。
+        
+        Args:
+            hand_landmarks_list: 每帧的手部关键点列表，每个元素是长度为 N_hand 的列表，
+                                 每个手包含 21 个关键点，每个关键点有 x, y, z 属性（归一化坐标）。
+            handedness_list: 每帧的左右手信息，用于区分左右手颜色。
+            timestamps: 时间戳列表（纳秒），长度与 hand_landmarks_list 相同。
+            camera_pose: 可选，相机在世界坐标系中的位姿，用于将手部坐标转换到世界坐标系。
+                         格式: {'position': [x, y, z], 'orientation': [qx, qy, qz, qw]}
+            scale: 手部缩放因子，用于调整手部在3D空间中的显示大小。
+        """
+        if len(hand_landmarks_list) == 0 or len(timestamps) == 0:
+            return
+        
+        # 定义左右手颜色
+        left_color = [100, 200, 255]   # 蓝色
+        right_color = [255, 100, 100]  # 红色
+        
+        entity_path = "world/hands"
+        
+        for frame_idx, (hand_landmarks, handedness, ts) in enumerate(zip(
+            hand_landmarks_list, handedness_list, timestamps
+        )):
+            self._set_timestamp(ts)
+            
+            # 遍历每只手
+            for hand_idx, (hand_landmarks_single, handedness_single) in enumerate(
+                zip(hand_landmarks, handedness)
+            ):
+                # 确定颜色
+                is_left = handedness_single[0].category_name == "Left"
+                color = left_color if is_left else right_color
+                hand_label = "left" if is_left else "right"
+                
+                # 提取关键点坐标
+                # MediaPipe 坐标: x, y 归一化到 [0, 1]，z 是相对深度
+                # 需要将归一化坐标转换为实际3D坐标
+                xs = np.array([landmark.x for landmark in hand_landmarks_single])
+                ys = np.array([landmark.y for landmark in hand_landmarks_single])
+                zs = np.array([landmark.z for landmark in hand_landmarks_single])
+                
+                # 应用缩放
+                points_3d = np.stack([xs * scale, ys * scale, zs * scale], axis=-1)
+                
+                # 如果有相机位姿，将手部坐标转换到世界坐标系
+                if camera_pose is not None:
+                    cam_pos = np.array(camera_pose['position'])
+                    cam_quat = np.array(camera_pose['orientation'])  # [qx, qy, qz, qw]
+                    
+                    # 创建旋转矩阵
+                    from scipy.spatial.transform import Rotation as R
+                    rot = R.from_quat(cam_quat)  # MediaPipe 使用 [x, y, z, w]
+                    
+                    # 旋转点
+                    points_3d = rot.apply(points_3d)
+                    
+                    # 平移
+                    points_3d = points_3d + cam_pos
+                
+                hand_entity_path = f"{entity_path}/{hand_label}"
+                
+                # 记录关键点
+                rr.log(
+                    f"{hand_entity_path}/points",
+                    rr.Points3D(
+                        positions=points_3d,
+                        radii=0.0003,
+                        colors=color,
+                    )
+                )
+                
+                # 绘制连接线
+                for start_idx, end_idx in HAND_CONNECTIONS:
+                    start_point = points_3d[start_idx]
+                    end_point = points_3d[end_idx]
+                    
+                    rr.log(
+                        f"{hand_entity_path}/line_{start_idx}_{end_idx}",
+                        rr.LineStrips3D(
+                            strips=[start_point, end_point],
+                            colors=color,
+                        )
+                    )
+    
+    def view_hand_landmarks_from_detection(
+        self,
+        detection_results: list,
+        timestamps: np.ndarray,
+        camera_info: dict = None,
+        scale: float = 0.1,
+    ):
+        """
+        从 MediaPipe 检测结果可视化手部关键点。
+        
+        Args:
+            detection_results: 每帧的 MediaPipe 检测结果，包含 hand_landmarks 和 handedness。
+            timestamps: 时间戳列表（纳秒）。
+            camera_info: 可选，相机信息，包含内参和位姿。
+            scale: 手部缩放因子。
+        """
+        hand_landmarks_list = []
+        handedness_list = []
+        
+        for result in detection_results:
+            if result is not None and result.hand_landmarks:
+                hand_landmarks_list.append(result.hand_landmarks)
+                handedness_list.append(result.handedness)
+            else:
+                # 跳过没有检测到手部的帧
+                hand_landmarks_list.append([])
+                handedness_list.append([])
+        
+        # 过滤掉空帧
+        valid_indices = [i for i, h in enumerate(hand_landmarks_list) if len(h) > 0]
+        if valid_indices:
+            hand_landmarks_list = [hand_landmarks_list[i] for i in valid_indices]
+            handedness_list = [handedness_list[i] for i in valid_indices]
+            timestamps = [timestamps[i] for i in valid_indices]
+            
+            self.view_hand_landmarks(hand_landmarks_list, handedness_list, timestamps, camera_info, scale)
 
     def view_depth_maps(self, name: str, depth_maps: np.ndarray, timestamps: np.ndarray):
         """

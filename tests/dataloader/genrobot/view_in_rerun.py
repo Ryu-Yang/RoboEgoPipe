@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import cv2
 import numpy as np
 import re
 
@@ -100,6 +101,96 @@ def parse_and_view_hand_detect(viewer: Viewer, images):
                 detected_images.append(detected_image)
 
             viewer.view_image(name, detected_images, match_timestamps)
+
+
+def parse_and_view_hand_landmarks_3d(
+    viewer: Viewer, 
+    images, 
+    camera_info: dict = None,
+    camera_name: str = "camera2",
+    scale: float = 0.1,
+):
+    """
+    在3D世界中可视化手部关键点。
+    
+    Args:
+        viewer: Viewer 实例
+        images: 图像数据字典
+        camera_info: 相机信息，用于获取相机位姿
+        camera_name: 要处理的相机名称
+        scale: 手部缩放因子
+    """
+    detector = Detector()
+    
+    # 查找指定相机的图像
+    target_topic = None
+    for topic in images.keys():
+        if camera_name in topic:
+            target_topic = topic
+            break
+    
+    if target_topic is None:
+        log.warning(f"⚠️ 未找到包含 {camera_name} 的图像数据")
+        return
+    
+    data = images[target_topic]
+    match_images = np.array(data["images"], dtype=np.float32)
+    match_timestamps = np.array(data["timestamps"], dtype=np.float64)
+    
+    # 存储检测结果
+    detection_results = []
+    valid_timestamps = []
+    
+    log.info(f"🖐️ 开始手部关键点检测: {target_topic} ({len(match_images)} 帧)")
+    
+    for i in range(len(match_images)):
+        # 转换图像格式
+        frame = match_images[i]
+        if frame.dtype == np.float32:
+            if frame.max() <= 1.0:
+                frame = (frame * 255).astype(np.uint8)
+            else:
+                frame = np.clip(frame, 0, 255).astype(np.uint8)
+        
+        # 转换为 RGB
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # 创建 MediaPipe 图像
+        import mediapipe as mp
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+        
+        # 转换时间戳
+        timestamp_ms = int(match_timestamps[i] / 1_000_000)
+        
+        # 检测手部
+        result = detector.landmarker.detect_for_video(mp_image, timestamp_ms)
+        detection_results.append(result)
+        valid_timestamps.append(match_timestamps[i])
+    
+    log.info(f"✅ 手部检测完成，共检测到 {sum(len(r.hand_landmarks) for r in detection_results if r.hand_landmarks)} 只手")
+    
+    # 获取相机位姿（如果有）
+    camera_pose = None
+    if camera_info:
+        # 查找相机信息
+        for topic, cam_data in camera_info.items():
+            if camera_name in topic and cam_data["info"]:
+                first_info = cam_data["info"][0]
+                T_b_c = first_info.get('T_b_c', [])
+                if len(T_b_c) >= 7:
+                    camera_pose = {
+                        'position': [T_b_c[0], T_b_c[1], T_b_c[2]],
+                        'orientation': [T_b_c[3], T_b_c[4], T_b_c[5], T_b_c[6]],
+                    }
+                break
+    
+    # 在3D世界中可视化手部
+    viewer.view_hand_landmarks_from_detection(
+        detection_results,
+        valid_timestamps,
+        camera_pose,
+        scale
+    )
 
 
 def parse_and_view_depth_data(viewer: Viewer, depths):
@@ -431,6 +522,7 @@ def main():
         parse_and_view_camera_image(viewer, images)
         parse_and_view_depth_data(viewer, depth_data)
         parse_and_view_hand_detect(viewer, images)
+        parse_and_view_hand_landmarks_3d(viewer, images, camera_info, camera_name="camera2", scale=0.1)
 
     # viewer.flush()
 
