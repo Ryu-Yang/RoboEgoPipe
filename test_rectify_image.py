@@ -245,15 +245,15 @@ if __name__ == "__main__":
     os.makedirs("output/rectify_images", exist_ok=True)
     
     # ================= 1. 构建左相机内参矩阵 =================
-    fx_l, fy_l = 507.87387315510574, 509.4144511814894
-    cx_l, cy_l = 796.7150518282281, 655.6687369325308
+    fx_l, fy_l = 360, 360
+    cx_l, cy_l = 480, 360
     K1 = np.array([[fx_l, 0, cx_l],
                    [0, fy_l, cy_l],
                    [0, 0, 1]], dtype=np.float64)
 
     # ================= 2. 构建右相机内参矩阵 =================
-    fx_r, fy_r = 511.053073270337, 512.7060865113444
-    cx_r, cy_r = 804.5116352623274, 617.9051244593389
+    fx_r, fy_r = 360, 360
+    cx_r, cy_r = 480, 360
     K2 = np.array([[fx_r, 0, cx_r],
                    [0, fy_r, cy_r],
                    [0, 0, 1]], dtype=np.float64)
@@ -294,11 +294,11 @@ if __name__ == "__main__":
     D1 = np.zeros((5, 1), dtype=np.float64)  # [k1, k2, p1, p2, k3]
     D2 = np.zeros((5, 1), dtype=np.float64)
 
-    image_size = (1600, 1300)  # (width, height)
+    image_size = (960, 720)  # (width, height)
 
     # 加载图像用于交互模式
-    image_l = cv2.imread("output/undistorted_images/l_pinhole_output.jpg")
-    image_r = cv2.imread("output/undistorted_images/r_pinhole_output.jpg")
+    image_l = cv2.imread("output/new_undistorted_images/l_pinhole_output.jpg")
+    image_r = cv2.imread("output/new_undistorted_images/r_pinhole_output.jpg")
     
     # 交互模式
     if args.interactive:
